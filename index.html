@@ -215,27 +215,8 @@
     </div>
 
     <div class="panel">
-      <p class="panel-title">📸 Add a snapshot — the reliable way</p>
-      <p class="panel-sub">Paste or upload the roster screenshot right here in the chat with Claude, every ~20 minutes. Claude reads it and refreshes this board for you — no network call from the page, so it always works.</p>
-
-      <details class="troubleshoot" open>
-        <summary>Optional: try automatic in-browser reading (best-effort, may not work in every environment)</summary>
-        <div class="troubleshoot-body" style="margin-bottom:10px;">
-          This tries to call Claude's vision model directly from inside this page. It depends on a network bridge that isn't available in every place this dashboard can be opened — if you see "Failed to fetch", that bridge isn't reachable here, and pasting the screenshot in chat (above) is the dependable option instead.
-        </div>
-        <div class="upload-row">
-          <label class="dropzone" id="dropzone">
-            <span class="dz-icon">⇪</span>
-            <span class="dz-text" id="dzText"><b>Click to upload, or drag a screenshot here</b><span>PNG or JPG of the agent report table</span></span>
-            <input type="file" id="fileInput" accept="image/*">
-          </label>
-          <button class="big btn-primary" id="analyzeBtn" disabled>Try reading it</button>
-        </div>
-        <div class="status-line" id="statusLine"></div>
-        <div class="banner-warn" id="connBanner">⚠ Couldn't reach the analysis service from this page — use the "paste in chat" flow above instead.</div>
-        <button class="icon-btn" id="testConnBtn" style="margin-top:10px;">Test API connection</button>
-        <div class="debug-log" id="debugLog" style="display:none;"></div>
-      </details>
+      <p class="panel-title">📸 How to add a new snapshot</p>
+      <p class="panel-sub">Every ~20 minutes: paste or upload the roster screenshot right here in the chat with Claude. Claude reads the table and adds a new entry to the "embedded snapshots" list in <code style="background:var(--bg-panel-alt);padding:1px 5px;border-radius:4px;font-family:'IBM Plex Mono',monospace;">board.html</code>. Push that change to GitHub, and this board picks it up automatically — no upload button, no API keys, nothing that can silently break.</p>
     </div>
 
     <div class="kpi-grid" id="kpiGrid"></div>
@@ -303,22 +284,32 @@
    4. Paste those values below. This is safe to publish on GitHub Pages — Firebase web
       config is a public identifier, not a secret; access is controlled by Firestore rules.
 ================================================================================ */
-const FIREBASE_CONFIG = {
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
   apiKey: "AIzaSyCzGOZi8zjTOqBPODE8RvfuK8bYTe72fDc",
   authDomain: "gev-board.firebaseapp.com",
   projectId: "gev-board",
   storageBucket: "gev-board.firebasestorage.app",
   messagingSenderId: "731120221781",
-  appId: "1:731120221781:web:cb33b4d373792981325edc"
+  appId: "1:731120221781:web:cb33b4d373792981325edc",
+  measurementId: "G-28TYC3D3MG"
 };
-firebase.initializeApp(FIREBASE_CONFIG);
-const db = firebase.firestore();
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
 /* ========================= State ========================= */
 let snapshots = [];
 let selectedIdx = -1;
 let charts = {};
-let pendingFile = null;
 
 /* ========================= Theme ========================= */
 async function initTheme(){
@@ -708,172 +699,6 @@ function renderAll(){
     footer.textContent = '';
   }
 }
-
-/* ========================= Upload + analyze =========================
-   Calling api.anthropic.com directly from a public GitHub Pages site will NOT
-   work: browsers block the request (no CORS allowance) and, even if they
-   didn't, your API key would sit in plain view in this file's source for
-   anyone to copy. Set CLAUDE_PROXY_URL below to a small serverless proxy you
-   control (Cloudflare Worker, Vercel/Netlify function, etc.) that holds the
-   real API key server-side and forwards the request. Leave it blank to keep
-   this "auto-read" panel disabled and rely on pasting screenshots in chat.
-======================================================================== */
-const CLAUDE_PROXY_URL = ""; // e.g. "https://your-worker.yoursubdomain.workers.dev"
-
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('fileInput');
-const analyzeBtn = document.getElementById('analyzeBtn');
-const statusLine = document.getElementById('statusLine');
-const dzText = document.getElementById('dzText');
-const connBanner = document.getElementById('connBanner');
-const debugLog = document.getElementById('debugLog');
-
-['dragover'].forEach(evt=> dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
-['dragleave','drop'].forEach(evt=> dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.remove('drag'); }));
-dropzone.addEventListener('drop', e=>{ const f = e.dataTransfer.files[0]; if(f) handleFile(f); });
-fileInput.addEventListener('change', e=>{ const f = e.target.files[0]; if(f) handleFile(f); });
-
-function handleFile(file){
-  pendingFile = file;
-  dzText.innerHTML = `<b>${file.name}</b><span>Ready to read — click "Read & add to board"</span>`;
-  analyzeBtn.disabled = false;
-  statusLine.textContent = ''; statusLine.className = 'status-line';
-}
-
-function fileToBase64(file){
-  return new Promise((resolve, reject)=>{
-    const r = new FileReader();
-    r.onload = ()=> resolve(r.result.split(',')[1]);
-    r.onerror = ()=> reject(new Error('read failed'));
-    r.readAsDataURL(file);
-  });
-}
-
-function logDebug(msg){
-  debugLog.style.display = 'block';
-  debugLog.textContent += (debugLog.textContent ? '\n' : '') + '[' + new Date().toLocaleTimeString() + '] ' + msg;
-  debugLog.scrollTop = debugLog.scrollHeight;
-}
-
-// Compact schema keeps output well under the token budget even with 30+ agents,
-// which is the main reason big rosters were failing to parse before.
-const EXTRACTION_PROMPT = `Read the call-center agent status table in this screenshot. A green dot means the agent is online/active; a red dot means offline/inactive.
-
-Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this compact shape (short keys on purpose):
-{"agents":[{"n":"Agent Name","s":"on","g":"group","an":0,"na":0,"t":0,"tt":0,"rt":0,"br":0,"oc":0}]}
-
-Field meanings: n=name, s="on" or "off" for the status dot, g=group, an=Answered, na=Not Answered, t=Total, tt=Avg Talktime seconds, rt=Avg Ringtime seconds, br=Current Break time seconds, oc=Oncall duration seconds. Convert values like ".00" to 0. Include every row visible in the image, even rows that are all zero.`;
-
-function extractJson(text){
-  let clean = text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
-  try{ return JSON.parse(clean); }catch(e){}
-  const first = clean.indexOf('{'), last = clean.lastIndexOf('}');
-  if(first !== -1 && last !== -1 && last > first){
-    return JSON.parse(clean.slice(first, last+1));
-  }
-  throw new Error('No valid JSON found in response');
-}
-
-async function callClaude(payload){
-  if(!CLAUDE_PROXY_URL){
-    throw new Error('No proxy configured — set CLAUDE_PROXY_URL to your serverless endpoint');
-  }
-  const response = await fetch(CLAUDE_PROXY_URL, {
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
-  });
-  const bodyText = await response.text();
-  if(!response.ok){
-    logDebug('HTTP ' + response.status + ': ' + bodyText.slice(0,300));
-    throw new Error('API returned ' + response.status);
-  }
-  return JSON.parse(bodyText);
-}
-
-document.getElementById('testConnBtn').addEventListener('click', async ()=>{
-  logDebug('Testing connection…');
-  try{
-    const data = await callClaude({ model:'claude-sonnet-4-6', max_tokens:20, messages:[{role:'user', content:'reply with the word ok'}] });
-    const text = (data.content||[]).find(b=>b.type==='text');
-    logDebug('Success — model responded: "' + (text ? text.text.trim() : '(no text)') + '"');
-    connBanner.style.display = 'none';
-  }catch(err){
-    logDebug('Connection test failed: ' + err.message);
-    connBanner.style.display = 'block';
-  }
-});
-
-async function analyzeImage(){
-  if(!pendingFile) return;
-  analyzeBtn.disabled = true;
-  statusLine.className = 'status-line busy';
-  statusLine.textContent = 'Reading the roster board…';
-  connBanner.style.display = 'none';
-
-  try{
-    const b64 = await fileToBase64(pendingFile);
-    const mediaType = pendingFile.type || 'image/png';
-
-    const data = await callClaude({
-      model:'claude-sonnet-4-6',
-      max_tokens:1000,
-      messages:[{ role:'user', content:[
-        {type:'image', source:{type:'base64', media_type: mediaType, data: b64}},
-        {type:'text', text: EXTRACTION_PROMPT}
-      ]}]
-    });
-
-    const textBlock = (data.content || []).find(b=> b.type === 'text');
-    if(!textBlock) throw new Error('Model returned no readable text');
-
-    const parsed = extractJson(textBlock.text);
-    if(!parsed.agents || !Array.isArray(parsed.agents) || parsed.agents.length===0){
-      throw new Error('No agent rows found in the image');
-    }
-
-    const agents = parsed.agents.map(r=>({
-      name: r.n || 'Unknown',
-      status: r.s === 'on' ? 'online' : 'offline',
-      group: r.g || 'default_group',
-      answered: Number(r.an)||0,
-      not_answered: Number(r.na)||0,
-      total: Number(r.t)||0,
-      avg_talktime_sec: Number(r.tt)||0,
-      avg_ringtime_sec: Number(r.rt)||0,
-      current_break_sec: Number(r.br)||0,
-      oncall_duration_sec: Number(r.oc)||0
-    }));
-
-    const ts = Date.now();
-    const snap = {ts, source:'upload', agents};
-    const saveRes = await storageSet('snapshot:'+ts, JSON.stringify(snap));
-    if(!saveRes) throw new Error('Read the image fine, but could not save the snapshot to storage');
-
-    snapshots.push(snap);
-    snapshots.sort((a,b)=> a.ts - b.ts);
-    selectedIdx = snapshots.length - 1;
-
-    statusLine.className = 'status-line ok';
-    statusLine.textContent = `Added snapshot with ${agents.length} agents at ${new Date(ts).toLocaleTimeString()}.`;
-    logDebug('Parsed ' + agents.length + ' agents successfully.');
-    renderAll();
-
-    pendingFile = null; fileInput.value = '';
-    dzText.innerHTML = '<b>Click to upload, or drag a screenshot here</b><span>PNG or JPG of the agent report table</span>';
-
-  }catch(err){
-    console.error(err);
-    logDebug('Analyze failed: ' + err.message);
-    statusLine.className = 'status-line err';
-    const isNetwork = /fetch|network|failed to fetch|proxy/i.test(err.message);
-    statusLine.textContent = isNetwork
-      ? 'Could not reach the analysis service — see "Upload not working?" below.'
-      : 'Could not read that image — try a clearer screenshot of the table. (' + err.message + ')';
-    if(isNetwork) connBanner.style.display = 'block';
-  }finally{
-    analyzeBtn.disabled = !pendingFile;
-  }
-}
-analyzeBtn.addEventListener('click', analyzeImage);
 
 document.getElementById('snapshotPicker').addEventListener('change', e=>{
   selectedIdx = Number(e.target.value);
