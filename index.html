@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telecalling Control Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0A1120;
+    --bg-panel:#111B2E;
+    --bg-panel-alt:#16223A;
+    --line:#233250;
+    --line-soft:#1A2740;
+    --amber:#F5A524;
+    --amber-dim:#B97E1D;
+    --green:#35D68A;
+    --red:#FB5A5A;
+    --text-hi:#EAF0FB;
+    --text-mid:#93A5C6;
+    --text-low:#5C6C8C;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text-hi);font-family:'Inter',sans-serif;}
+  body{padding:0 0 48px;}
+  ::selection{background:var(--amber);color:#0A1120;}
+
+  /* ---------- Ticker ---------- */
+  .ticker-wrap{
+    background:#08101F;
+    border-bottom:1px solid var(--line);
+    overflow:hidden;
+    white-space:nowrap;
+    padding:9px 0;
+    position:relative;
+  }
+  .ticker-wrap::before{
+    content:"LIVE";
+    position:absolute; left:0; top:0; bottom:0;
+    background:linear-gradient(90deg,#08101F 55%,transparent);
+    z-index:2; padding:9px 18px 9px 14px;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2px;
+    color:var(--amber); display:flex; align-items:center; gap:6px;
+  }
+  .ticker-track{
+    display:inline-flex;
+    animation:scrollTicker 40s linear infinite;
+    padding-left:100%;
+  }
+  @keyframes scrollTicker{ from{transform:translateX(0);} to{transform:translateX(-100%);} }
+  .ticker-item{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px; color:var(--text-mid);
+    padding:0 22px; display:inline-flex; align-items:center; gap:8px;
+    border-right:1px solid var(--line-soft);
+  }
+  .ticker-item b{color:var(--text-hi); font-weight:600;}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:none;}
+  .dot.on{background:var(--green); box-shadow:0 0 6px var(--green);}
+  .dot.off{background:var(--red); box-shadow:0 0 6px var(--red);}
+  .tick-up{color:var(--green);} .tick-down{color:var(--red);}
+
+  /* ---------- Header ---------- */
+  header{
+    max-width:1320px; margin:0 auto; padding:28px 24px 18px;
+    display:flex; justify-content:space-between; align-items:flex-end; gap:20px; flex-wrap:wrap;
+  }
+  .brand-eyebrow{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:3px;
+    color:var(--amber-dim); text-transform:uppercase; margin:0 0 6px;
+  }
+  h1{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:32px;
+    margin:0; letter-spacing:-0.5px;
+  }
+  .sync-info{
+    text-align:right; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-mid);
+  }
+  .sync-info .clock{font-size:20px; color:var(--text-hi); font-weight:600;}
+
+  main{max-width:1320px; margin:0 auto; padding:0 24px;}
+
+  /* ---------- Upload panel ---------- */
+  .panel{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px 22px; margin-bottom:20px;
+  }
+  .panel-title{
+    font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:600;
+    color:var(--text-hi); margin:0 0 4px; display:flex; align-items:center; gap:8px;
+  }
+  .panel-sub{font-size:12.5px; color:var(--text-mid); margin:0 0 16px;}
+
+  .upload-row{display:flex; gap:14px; align-items:center; flex-wrap:wrap;}
+  .dropzone{
+    flex:1; min-width:240px; border:1.5px dashed var(--line);
+    border-radius:8px; padding:16px 18px; display:flex; align-items:center; gap:12px;
+    cursor:pointer; transition:border-color .15s, background .15s; background:var(--bg-panel-alt);
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--amber); background:#1B2740;}
+  .dropzone input{display:none;}
+  .dz-icon{
+    width:36px; height:36px; border-radius:7px; background:#0F1930; border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; flex:none; color:var(--amber);
+  }
+  .dz-text b{display:block; font-size:13.5px; color:var(--text-hi);}
+  .dz-text span{font-size:12px; color:var(--text-low);}
+
+  .thumb-preview{
+    display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--text-mid);
+  }
+  .thumb-preview img{width:44px; height:32px; object-fit:cover; border-radius:5px; border:1px solid var(--line);}
+
+  button{
+    font-family:'Inter',sans-serif; font-weight:600; font-size:13px; cursor:pointer;
+    border-radius:7px; border:1px solid transparent; padding:11px 20px; transition:opacity .15s, transform .1s;
+  }
+  button:active{transform:scale(.98);}
+  button:disabled{opacity:.5; cursor:not-allowed;}
+  .btn-primary{background:var(--amber); color:#0A1120; border-color:var(--amber);}
+  .btn-primary:hover:not(:disabled){opacity:.9;}
+  .btn-ghost{background:transparent; color:var(--text-mid); border-color:var(--line);}
+  .btn-ghost:hover:not(:disabled){color:var(--text-hi); border-color:var(--text-mid);}
+
+  .status-line{
+    margin-top:12px; font-family:'IBM Plex Mono',monospace; font-size:12px; min-height:18px;
+  }
+  .status-line.ok{color:var(--green);}
+  .status-line.err{color:var(--red);}
+  .status-line.busy{color:var(--amber);}
+
+  /* ---------- KPI grid ---------- */
+  .kpi-grid{
+    display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:20px;
+  }
+  @media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(3,1fr);}}
+  @media(max-width:640px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+  .kpi{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px; position:relative; overflow:hidden;
+  }
+  .kpi::before{
+    content:""; position:absolute; top:0; left:0; width:3px; height:100%; background:var(--amber-dim);
+  }
+  .kpi.good::before{background:var(--green);} .kpi.bad::before{background:var(--red);}
+  .kpi-label{font-size:10.5px; letter-spacing:1.2px; text-transform:uppercase; color:var(--text-low); margin-bottom:8px;}
+  .kpi-val{font-family:'IBM Plex Mono',monospace; font-size:26px; font-weight:600; color:var(--text-hi);}
+  .kpi-val span{font-size:14px; color:var(--text-mid); font-weight:400;}
+
+  /* ---------- Charts ---------- */
+  .chart-grid{
+    display:grid; grid-template-columns:1.3fr 1.3fr 1fr; gap:14px; margin-bottom:20px;
+  }
+  @media(max-width:980px){.chart-grid{grid-template-columns:1fr;}}
+  .chart-card{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px; min-height:280px; display:flex; flex-direction:column;
+  }
+  .chart-card h3{
+    font-family:'Space Grotesk',sans-serif; font-size:13.5px; margin:0 0 4px; color:var(--text-hi);
+  }
+  .chart-card p{margin:0 0 14px; font-size:11.5px; color:var(--text-low);}
+  .chart-card canvas{flex:1;}
+
+  /* ---------- Table ---------- */
+  .table-panel{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 18px 6px; margin-bottom:20px;
+  }
+  .table-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;}
+  select{
+    background:var(--bg-panel-alt); color:var(--text-hi); border:1px solid var(--line);
+    border-radius:6px; padding:8px 10px; font-family:'IBM Plex Mono',monospace; font-size:12px;
+  }
+  table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  th{
+    text-align:left; font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--text-low);
+    padding:8px 10px; border-bottom:1px solid var(--line); font-weight:600;
+  }
+  td{padding:10px; border-bottom:1px solid var(--line-soft); font-family:'IBM Plex Mono',monospace; color:var(--text-hi);}
+  tr:hover td{background:#141F36;}
+  td.name-cell{font-family:'Inter',sans-serif; font-weight:600; display:flex; align-items:center; gap:8px;}
+  td.rate-good{color:var(--green);} td.rate-bad{color:var(--red);}
+
+  .empty-note{color:var(--text-low); font-size:12.5px; padding:20px 4px 24px; text-align:center;}
+  footer{max-width:1320px; margin:0 auto; padding:10px 24px 0; color:var(--text-low); font-size:11px; font-family:'IBM Plex Mono',monospace;}
+</style>
+</head>
+<body>
+
+  <div class="ticker-wrap">
+    <div class="ticker-track" id="tickerTrack"></div>
+  </div>
+
+  <header>
+    <div>
+      <p class="brand-eyebrow">Dispatch / Telecalling Ops</p>
+      <h1>Control Board</h1>
+    </div>
+    <div class="sync-info">
+      <div class="clock" id="clock">--:--</div>
+      <div id="syncLabel">no snapshots yet</div>
+    </div>
+  </header>
+
+  <main>
+
+    <div class="panel">
+      <p class="panel-title">📸 Add snapshot</p>
+      <p class="panel-sub">Upload the roster screenshot every ~20 minutes. It's read automatically and folded into the board below.</p>
+      <div class="upload-row">
+        <label class="dropzone" id="dropzone">
+          <span class="dz-icon">⇪</span>
+          <span class="dz-text" id="dzText"><b>Click to upload, or drag a screenshot here</b><span>PNG or JPG of the agent report table</span></span>
+          <input type="file" id="fileInput" accept="image/*">
+        </label>
+        <button class="btn-primary" id="analyzeBtn" disabled>Read &amp; add to board</button>
+        <button class="btn-ghost" id="clearSampleBtn" style="display:none;">Clear sample data</button>
+      </div>
+      <div class="status-line" id="statusLine"></div>
+    </div>
+
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>Answered vs not answered — by agent</h3>
+        <p>Current snapshot</p>
+        <canvas id="agentBarChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Answer rate trend</h3>
+        <p>Across every snapshot uploaded so far</p>
+        <canvas id="trendChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Live status split</h3>
+        <p>Online vs offline right now</p>
+        <canvas id="statusDonut"></canvas>
+      </div>
+    </div>
+
+    <div class="table-panel">
+      <div class="table-head">
+        <p class="panel-title" style="margin:0;">Agent roster</p>
+        <select id="snapshotPicker"></select>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="rosterTable">
+          <thead>
+            <tr>
+              <th>Agent</th><th>Group</th><th>Answered</th><th>Not Ans.</th><th>Total</th>
+              <th>Answer Rate</th><th>Avg Talktime</th><th>Avg Ringtime</th><th>Break</th><th>Oncall</th>
+            </tr>
+          </thead>
+          <tbody id="rosterBody"></tbody>
+        </table>
+      </div>
+      <div class="empty-note" id="emptyNote" style="display:none;">No snapshot selected yet — upload a screenshot above to populate the board.</div>
+    </div>
+
+  </main>
+
+  <footer id="footerNote"></footer>
+
+<script>
+/* ========================= State ========================= */
+let snapshots = [];      // [{ts, source, agents:[...]}]
+let selectedIdx = -1;    // index into snapshots for table view
+let charts = {};
+let pendingFile = null;
+
+/* ========================= Clock ========================= */
+function tickClock(){
+  const d = new Date();
+  document.getElementById('clock').textContent = d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(tickClock, 1000); tickClock();
+
+/* ========================= Storage helpers ========================= */
+async function storageListSnapshotKeys(){
+  try{
+    const res = await window.storage.list('snapshot:', false);
+    return res ? res.keys : [];
+  }catch(e){ return []; }
+}
+async function storageGet(key){
+  try{
+    const res = await window.storage.get(key, false);
+    return res ? res.value : null;
+  }catch(e){ return null; }
+}
+async function storageSet(key, value){
+  try{ return await window.storage.set(key, value, false); }
+  catch(e){ console.error('storage set failed', e); return null; }
+}
+async function storageDelete(key){
+  try{ return await window.storage.delete(key, false); }
+  catch(e){ return null; }
+}
+
+async function loadAllSnapshots(){
+  const keys = await storageListSnapshotKeys();
+  const loaded = [];
+  for(const k of keys){
+    const raw = await storageGet(k);
+    if(raw){
+      try{ loaded.push(JSON.parse(raw)); }catch(e){}
+    }
+  }
+  loaded.sort((a,b)=> a.ts - b.ts);
+  return loaded;
+}
+
+/* ========================= Seed sample (first run only) ========================= */
+const SAMPLE_AGENTS = [
+  {name:"Abdul", status:"offline", number:"8248601432", group:"default_group", duration_sec:0, inbound:0, click_to_call:0, obd_campaign:0, answered:0, not_answered:0, total:0, avg_talktime_sec:0, avg_ringtime_sec:0, current_break_sec:0, oncall_duration_sec:0},
+  {name:"Karthikeyan", status:"offline", number:"8939759874", group:"default_group", duration_sec:0, inbound:0, click_to_call:0, obd_campaign:0, answered:0, not_answered:0, total:0, avg_talktime_sec:0, avg_ringtime_sec:0, current_break_sec:0, oncall_duration_sec:0},
+  {name:"Nandha", status:"online", number:"8122801488", group:"default_group", duration_sec:2058, inbound:0, click_to_call:114, obd_campaign:0, answered:77, not_answered:37, total:114, avg_talktime_sec:26.73, avg_ringtime_sec:5.24, current_break_sec:0, oncall_duration_sec:0},
+  {name:"PRIYA", status:"offline", number:"7904517510", group:"default_group", duration_sec:0, inbound:0, click_to_call:0, obd_campaign:0, answered:0, not_answered:0, total:0, avg_talktime_sec:0, avg_ringtime_sec:0, current_break_sec:0, oncall_duration_sec:0},
+  {name:"Selin", status:"online", number:"8110002184", group:"default_group", duration_sec:1515, inbound:0, click_to_call:92, obd_campaign:0, answered:62, not_answered:30, total:92, avg_talktime_sec:24.44, avg_ringtime_sec:3.58, current_break_sec:0, oncall_duration_sec:0},
+  {name:"Sharmila", status:"offline", number:"8110002185", group:"default_group", duration_sec:0, inbound:0, click_to_call:0, obd_campaign:0, answered:0, not_answered:0, total:0, avg_talktime_sec:0, avg_ringtime_sec:0, current_break_sec:0, oncall_duration_sec:0},
+  {name:"Vidya", status:"online", number:"8110002187", group:"default_group", duration_sec:1108, inbound:0, click_to_call:90, obd_campaign:0, answered:35, not_answered:55, total:90, avg_talktime_sec:31.66, avg_ringtime_sec:11.01, current_break_sec:0, oncall_duration_sec:0},
+  {name:"Vignesha Gurudas", status:"offline", number:"9962344567", group:"default_group", duration_sec:0, inbound:0, click_to_call:0, obd_campaign:0, answered:0, not_answered:0, total:0, avg_talktime_sec:0, avg_ringtime_sec:0, current_break_sec:0, oncall_duration_sec:0}
+];
+
+async function seedSampleIfEmpty(){
+  const keys = await storageListSnapshotKeys();
+  if(keys.length === 0){
+    const ts = Date.now() - 1000*60*20;
+    const snap = {ts, source:"sample", agents: SAMPLE_AGENTS};
+    await storageSet('snapshot:'+ts, JSON.stringify(snap));
+    return true;
+  }
+  return false;
+}
+
+/* ========================= Rendering ========================= */
+function fmtSec(s){
+  s = Math.round(Number(s)||0);
+  if(s <= 0) return '0:00';
+  const m = Math.floor(s/60), r = s%60;
+  return m + ':' + String(r).padStart(2,'0');
+}
+function sum(arr, key){ return arr.reduce((a,r)=> a + (Number(r[key])||0), 0); }
+
+function computeAgentRate(a){
+  const tot = (Number(a.answered)||0) + (Number(a.not_answered)||0);
+  if(tot === 0) return null;
+  return (Number(a.answered)/tot)*100;
+}
+
+function renderTicker(snap){
+  const track = document.getElementById('tickerTrack');
+  if(!snap || !snap.agents.length){ track.innerHTML = '<span class="ticker-item">Waiting for first snapshot…</span>'; return; }
+  const items = snap.agents.map(a=>{
+    const rate = computeAgentRate(a);
+    const rateTxt = rate===null ? '—' : rate.toFixed(0)+'%';
+    const cls = rate===null ? '' : (rate>=60?'tick-up':(rate<40?'tick-down':''));
+    return `<span class="ticker-item"><span class="dot ${a.status==='online'?'on':'off'}"></span><b>${a.name}</b> ${a.answered}/${a.total} <span class="${cls}">${rateTxt}</span></span>`;
+  }).join('');
+  // duplicate content so the scroll loop feels continuous
+  track.innerHTML = items + items;
+}
+
+function renderKPIs(snap){
+  const grid = document.getElementById('kpiGrid');
+  if(!snap){ grid.innerHTML=''; return; }
+  const agents = snap.agents;
+  const online = agents.filter(a=>a.status==='online').length;
+  const offline = agents.length - online;
+  const answered = sum(agents,'answered');
+  const notAnswered = sum(agents,'not_answered');
+  const total = sum(agents,'total') || (answered+notAnswered);
+  const rate = (answered+notAnswered)>0 ? (answered/(answered+notAnswered))*100 : 0;
+  const activeAgents = agents.filter(a=> (Number(a.total)||0) > 0);
+  const avgTalk = activeAgents.length ? sum(activeAgents,'avg_talktime_sec')/activeAgents.length : 0;
+
+  const cards = [
+    {label:'Agents online', val:online, sub:'/ '+agents.length, cls: online>0?'good':'bad'},
+    {label:'Agents offline', val:offline, sub:'', cls: offline>0?'bad':'good'},
+    {label:'Total calls', val:total, sub:'', cls:''},
+    {label:'Answered', val:answered, sub:'', cls:'good'},
+    {label:'Not answered', val:notAnswered, sub:'', cls: notAnswered>0?'bad':'good'},
+    {label:'Answer rate', val:rate.toFixed(1)+'%', sub:'', cls: rate>=60?'good':(rate<40?'bad':'')},
+  ];
+  grid.innerHTML = cards.map(c=>`
+    <div class="kpi ${c.cls}">
+      <div class="kpi-label">${c.label}</div>
+      <div class="kpi-val">${c.val}<span>${c.sub}</span></div>
+    </div>`).join('');
+}
+
+function renderRoster(snap){
+  const body = document.getElementById('rosterBody');
+  const empty = document.getElementById('emptyNote');
+  if(!snap){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  body.innerHTML = snap.agents.map(a=>{
+    const rate = computeAgentRate(a);
+    const rateTxt = rate===null ? '—' : rate.toFixed(0)+'%';
+    const rateCls = rate===null ? '' : (rate>=60?'rate-good':(rate<40?'rate-bad':''));
+    return `<tr>
+      <td class="name-cell"><span class="dot ${a.status==='online'?'on':'off'}"></span>${a.name}</td>
+      <td>${a.group||'—'}</td>
+      <td>${a.answered ?? 0}</td>
+      <td>${a.not_answered ?? 0}</td>
+      <td>${a.total ?? 0}</td>
+      <td class="${rateCls}">${rateTxt}</td>
+      <td>${fmtSec(a.avg_talktime_sec)}</td>
+      <td>${fmtSec(a.avg_ringtime_sec)}</td>
+      <td>${fmtSec(a.current_break_sec)}</td>
+      <td>${fmtSec(a.oncall_duration_sec)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function chartColors(){
+  return {amber:'#F5A524', green:'#35D68A', red:'#FB5A5A', grid:'#1E2A45', text:'#93A5C6'};
+}
+
+function renderBarChart(snap){
+  const ctx = document.getElementById('agentBarChart');
+  const c = chartColors();
+  const labels = snap ? snap.agents.map(a=>a.name) : [];
+  const answered = snap ? snap.agents.map(a=>Number(a.answered)||0) : [];
+  const notAnswered = snap ? snap.agents.map(a=>Number(a.not_answered)||0) : [];
+  if(charts.bar) charts.bar.destroy();
+  charts.bar = new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[
+      {label:'Answered', data:answered, backgroundColor:c.green, borderRadius:4, maxBarThickness:18},
+      {label:'Not answered', data:notAnswered, backgroundColor:c.red, borderRadius:4, maxBarThickness:18}
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{
+        x:{stacked:true, ticks:{color:c.text, font:{size:10.5}}, grid:{color:c.grid}},
+        y:{stacked:true, ticks:{color:c.text}, grid:{color:c.grid}, beginAtZero:true}
+      },
+      plugins:{legend:{labels:{color:c.text, font:{size:11}}}}
+    }
+  });
+}
+
+function renderTrendChart(){
+  const ctx = document.getElementById('trendChart');
+  const c = chartColors();
+  const recent = snapshots.slice(-30);
+  const labels = recent.map(s=> new Date(s.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+  const rates = recent.map(s=>{
+    const answered = sum(s.agents,'answered'), notAnswered = sum(s.agents,'not_answered');
+    const t = answered+notAnswered;
+    return t>0 ? +( (answered/t)*100 ).toFixed(1) : 0;
+  });
+  const totals = recent.map(s=> sum(s.agents,'total'));
+  if(charts.trend) charts.trend.destroy();
+  charts.trend = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[
+      {label:'Answer rate %', data:rates, borderColor:c.amber, backgroundColor:'rgba(245,165,36,0.12)', fill:true, tension:.35, pointRadius:3, yAxisID:'y'},
+      {label:'Total calls', data:totals, borderColor:c.green, backgroundColor:'transparent', tension:.35, pointRadius:3, yAxisID:'y1', borderDash:[4,3]}
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{
+        x:{ticks:{color:c.text, font:{size:10}}, grid:{color:c.grid}},
+        y:{position:'left', ticks:{color:c.text}, grid:{color:c.grid}, title:{display:true,text:'%',color:c.text}},
+        y1:{position:'right', ticks:{color:c.text}, grid:{display:false}, title:{display:true,text:'calls',color:c.text}}
+      },
+      plugins:{legend:{labels:{color:c.text, font:{size:11}}}}
+    }
+  });
+}
+
+function renderDonut(snap){
+  const ctx = document.getElementById('statusDonut');
+  const c = chartColors();
+  const online = snap ? snap.agents.filter(a=>a.status==='online').length : 0;
+  const offline = snap ? snap.agents.filter(a=>a.status==='offline').length : 0;
+  if(charts.donut) charts.donut.destroy();
+  charts.donut = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels:['Online','Offline'], datasets:[{data:[online,offline], backgroundColor:[c.green,c.red], borderColor:'#111B2E', borderWidth:3}] },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'68%',
+      plugins:{legend:{position:'bottom', labels:{color:c.text, font:{size:11}}}}
+    }
+  });
+}
+
+function renderSnapshotPicker(){
+  const picker = document.getElementById('snapshotPicker');
+  picker.innerHTML = snapshots.map((s,i)=>{
+    const label = (s.source==='sample'?'SAMPLE · ':'') + new Date(s.ts).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    return `<option value="${i}">${label}</option>`;
+  }).join('');
+  picker.value = selectedIdx;
+}
+
+function renderAll(){
+  const latest = snapshots.length ? snapshots[snapshots.length-1] : null;
+  if(selectedIdx < 0 && snapshots.length) selectedIdx = snapshots.length - 1;
+  const selected = selectedIdx>=0 ? snapshots[selectedIdx] : null;
+
+  renderTicker(latest);
+  renderKPIs(selected);
+  renderRoster(selected);
+  renderBarChart(selected);
+  renderTrendChart();
+  renderDonut(selected);
+  renderSnapshotPicker();
+
+  const syncLabel = document.getElementById('syncLabel');
+  const footer = document.getElementById('footerNote');
+  const sampleBtn = document.getElementById('clearSampleBtn');
+  if(latest){
+    syncLabel.textContent = 'last sync ' + new Date(latest.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + (latest.source==='sample' ? ' (sample)' : '');
+    footer.textContent = snapshots.length + ' snapshot' + (snapshots.length===1?'':'s') + ' stored · next upload due in ~20 min';
+    sampleBtn.style.display = snapshots.some(s=>s.source==='sample') ? 'inline-block' : 'none';
+  }else{
+    syncLabel.textContent = 'no snapshots yet';
+    footer.textContent = '';
+    sampleBtn.style.display = 'none';
+  }
+}
+
+/* ========================= Upload + analyze ========================= */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const statusLine = document.getElementById('statusLine');
+const dzText = document.getElementById('dzText');
+
+['dragover'].forEach(evt=> dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
+['dragleave','drop'].forEach(evt=> dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.remove('drag'); }));
+dropzone.addEventListener('drop', e=>{
+  const f = e.dataTransfer.files[0];
+  if(f) handleFile(f);
+});
+fileInput.addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(f) handleFile(f);
+});
+
+function handleFile(file){
+  pendingFile = file;
+  const url = URL.createObjectURL(file);
+  dzText.innerHTML = `<b>${file.name}</b><span>Ready to read — click "Read & add to board"</span>`;
+  analyzeBtn.disabled = false;
+  statusLine.textContent = '';
+  statusLine.className = 'status-line';
+}
+
+function fileToBase64(file){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=> resolve(r.result.split(',')[1]);
+    r.onerror = ()=> reject(new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+}
+
+const EXTRACTION_PROMPT = `You are reading a call-center agent status table from a screenshot. Extract every row into JSON.
+
+Each row has: Agent name, a colored status dot (green means online/active, red means offline/inactive), Number, Group, Duration, Inbound, Click_To_Call, OBD Campaign, Answered, Not Answered, Total, Avg Talktime (Seconds), Avg Ringtime (Seconds), Current Break time (Seconds), Oncall duration (Seconds).
+
+Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this shape:
+{"agents":[{"name":"string","status":"online|offline","number":"string","group":"string","duration_sec":number,"inbound":number,"click_to_call":number,"obd_campaign":number,"answered":number,"not_answered":number,"total":number,"avg_talktime_sec":number,"avg_ringtime_sec":number,"current_break_sec":number,"oncall_duration_sec":number}]}
+
+Rules: convert values like ".00" to 0. Green dot = "online", red dot = "offline". Include every row visible in the image.`;
+
+async function analyzeImage(){
+  if(!pendingFile) return;
+  analyzeBtn.disabled = true;
+  statusLine.className = 'status-line busy';
+  statusLine.textContent = 'Reading the roster board…';
+
+  try{
+    const b64 = await fileToBase64(pendingFile);
+    const mediaType = pendingFile.type || 'image/png';
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:1000,
+        messages:[{
+          role:'user',
+          content:[
+            {type:'image', source:{type:'base64', media_type: mediaType, data: b64}},
+            {type:'text', text: EXTRACTION_PROMPT}
+          ]
+        }]
+      })
+    });
+
+    if(!response.ok) throw new Error('API request failed: ' + response.status);
+    const data = await response.json();
+    const textBlock = (data.content || []).find(b=> b.type === 'text');
+    if(!textBlock) throw new Error('No text in response');
+
+    let clean = textBlock.text.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+    const parsed = JSON.parse(clean);
+    if(!parsed.agents || !Array.isArray(parsed.agents) || parsed.agents.length===0){
+      throw new Error('No agent rows found in the image');
+    }
+
+    const ts = Date.now();
+    const snap = {ts, source:'upload', agents: parsed.agents};
+    const saveRes = await storageSet('snapshot:'+ts, JSON.stringify(snap));
+    if(!saveRes) throw new Error('Could not save snapshot');
+
+    snapshots.push(snap);
+    snapshots.sort((a,b)=> a.ts - b.ts);
+    selectedIdx = snapshots.length - 1;
+
+    statusLine.className = 'status-line ok';
+    statusLine.textContent = `Added snapshot with ${parsed.agents.length} agents at ${new Date(ts).toLocaleTimeString()}.`;
+    renderAll();
+
+    pendingFile = null;
+    fileInput.value = '';
+    dzText.innerHTML = '<b>Click to upload, or drag a screenshot here</b><span>PNG or JPG of the agent report table</span>';
+
+  }catch(err){
+    console.error(err);
+    statusLine.className = 'status-line err';
+    statusLine.textContent = 'Could not read that image — try a clearer screenshot of the table. (' + err.message + ')';
+  }finally{
+    analyzeBtn.disabled = !pendingFile ? true : false;
+  }
+}
+
+analyzeBtn.addEventListener('click', analyzeImage);
+
+document.getElementById('clearSampleBtn').addEventListener('click', async ()=>{
+  const toRemove = snapshots.filter(s=>s.source==='sample');
+  for(const s of toRemove){ await storageDelete('snapshot:'+s.ts); }
+  snapshots = snapshots.filter(s=>s.source!=='sample');
+  selectedIdx = snapshots.length ? snapshots.length-1 : -1;
+  renderAll();
+});
+
+document.getElementById('snapshotPicker').addEventListener('change', e=>{
+  selectedIdx = Number(e.target.value);
+  const selected = snapshots[selectedIdx];
+  renderKPIs(selected);
+  renderRoster(selected);
+  renderBarChart(selected);
+  renderDonut(selected);
+});
+
+/* ========================= Init ========================= */
+async function init(){
+  await seedSampleIfEmpty();
+  snapshots = await loadAllSnapshots();
+  selectedIdx = snapshots.length - 1;
+  renderAll();
+}
+init();
+</script>
+</body>
+</html>
