@@ -167,6 +167,10 @@
     </div>
     <div class="header-right">
       <span class="status-pill" id="marketPill"></span>
+      <button class="icon-btn" id="exportBtn" title="Download today's data as a file">⬇ Export</button>
+      <label class="icon-btn" id="importLabel" title="Load a previously exported file" style="cursor:pointer;">
+        ⬆ Import<input type="file" id="importInput" accept="application/json" style="display:none;">
+      </label>
       <button class="icon-btn" id="themeToggle">🌙 Dark mode</button>
       <div class="sync-info">
         <div class="clock" id="clock">--:--</div>
@@ -275,16 +279,13 @@ let selectedIdx = -1;
 let rowSeq = 0;
 const DEFAULT_AGENTS = ["Nandha","Vidya","Selin","Abdul","Karthikeyan","PRIYA","Sharmila","Vignesha Gurudas"];
 
-/* ========================= Theme ========================= */
-async function initTheme(){
-  let theme = 'dark';
-  try{ const r = await window.storage.get('settings:theme', false); if(r && r.value) theme = r.value; }catch(e){}
-  applyTheme(theme, false);
+/* ========================= Theme (in-memory, no external bridge) ========================= */
+function initTheme(){
+  applyTheme('dark', false);
 }
-function applyTheme(theme, save=true){
+function applyTheme(theme){
   document.documentElement.setAttribute('data-theme', theme);
   document.getElementById('themeToggle').textContent = theme==='dark' ? '☀️ Light mode' : '🌙 Dark mode';
-  if(save){ try{ window.storage.set('settings:theme', theme, false); }catch(e){} }
   renderAll();
 }
 document.getElementById('themeToggle').addEventListener('click', ()=>{
@@ -312,28 +313,11 @@ function tickClock(){
 }
 setInterval(tickClock, 1000); tickClock();
 
-/* ========================= Storage helpers ========================= */
-async function storageListSnapshotKeys(){
-  try{ const res = await window.storage.list('snapshot:', false); return res ? res.keys : []; }
-  catch(e){ return []; }
-}
-async function storageGet(key){
-  try{ const res = await window.storage.get(key, false); return res ? res.value : null; }
-  catch(e){ return null; }
-}
-async function storageSet(key, value){
-  try{ return await window.storage.set(key, value, false); }
-  catch(e){ console.error('storage set failed', e); return null; }
-}
-async function loadAllSnapshots(){
-  const keys = await storageListSnapshotKeys();
-  const loaded = [];
-  for(const k of keys){
-    const raw = await storageGet(k);
-    if(raw){ try{ loaded.push(JSON.parse(raw)); }catch(e){} }
-  }
-  loaded.sort((a,b)=> a.ts - b.ts);
-  return loaded;
+/* ========================= Data: kept in memory, saved/loaded via Export/Import file ========================= */
+function loadAllSnapshots(){
+  // Snapshots live only in the `snapshots` variable for this browser tab.
+  // Use Export / Import (below) to carry them across page reloads or devices.
+  return snapshots;
 }
 
 /* ========================= Helpers ========================= */
@@ -411,17 +395,11 @@ document.getElementById('saveReportBtn').addEventListener('click', async ()=>{
   }
   const ts = Date.now();
   const snap = {ts, agents};
-  const res = await storageSet('snapshot:'+ts, JSON.stringify(snap));
-  if(!res){
-    statusLine.className = 'status-line err';
-    statusLine.textContent = 'Could not save — storage did not confirm the write. Try again.';
-    return;
-  }
   snapshots.push(snap);
   snapshots.sort((a,b)=> a.ts - b.ts);
   selectedIdx = snapshots.length - 1;
   statusLine.className = 'status-line ok';
-  statusLine.textContent = `Saved report with ${agents.length} agents at ${new Date(ts).toLocaleTimeString()}.`;
+  statusLine.textContent = `Saved report with ${agents.length} agents at ${new Date(ts).toLocaleTimeString()}. Remember to export before closing this tab.`;
   renderAll();
 });
 
@@ -766,11 +744,42 @@ document.getElementById('snapshotPicker').addEventListener('change', e=>{
   renderKPIs(selected); renderRoster(selected); renderBarChart(selected); renderDonut(selected); renderDurationChart(selected); renderLeaderboard(selected);
 });
 
+/* ========================= Export / Import (works in any browser, no bridge needed) ========================= */
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(snapshots, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `telecalling-report-${dateStr}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('importInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const loaded = JSON.parse(reader.result);
+      if(!Array.isArray(loaded)) throw new Error('File does not contain a snapshot list');
+      snapshots = loaded;
+      snapshots.sort((a,b)=> a.ts - b.ts);
+      selectedIdx = snapshots.length - 1;
+      seedEntryForm();
+      renderAll();
+    }catch(err){
+      alert('Could not read that file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
 /* ========================= Init ========================= */
-async function init(){
-  await initTheme();
-  snapshots = await loadAllSnapshots();
-  selectedIdx = snapshots.length - 1;
+function init(){
+  initTheme();
   seedEntryForm();
   renderAll();
 }
