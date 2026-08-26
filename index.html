@@ -1,789 +1,626 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Telecalling Control Board</title>
+<title>Call Line — Telecalling Leaderboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
-  :root[data-theme="dark"]{
-    --bg:#0A1120; --bg-panel:#111B2E; --bg-panel-alt:#16223A; --bg-elevated:#1B2740;
-    --line:#233250; --line-soft:#1A2740;
-    --amber:#F5A524; --amber-dim:#B97E1D; --amber-soft:rgba(245,165,36,.14);
-    --green:#35D68A; --green-soft:rgba(53,214,138,.14);
-    --red:#FB5A5A; --red-soft:rgba(251,90,90,.14);
-    --text-hi:#EAF0FB; --text-mid:#93A5C6; --text-low:#5C6C8C;
-    --shadow:0 10px 28px rgba(0,0,0,.4);
+  :root{
+    --gold:#F0A93A; --gold-rgb:240,169,58;
+    --teal:#35C4A1; --teal-rgb:53,196,161;
+    --red:#E2586B;
   }
-  :root[data-theme="light"]{
-    --bg:#F3F5FA; --bg-panel:#FFFFFF; --bg-panel-alt:#F3F6FC; --bg-elevated:#EDF1F9;
-    --line:#E2E7F1; --line-soft:#EDF0F8;
-    --amber:#C87F0A; --amber-dim:#E2A93F; --amber-soft:rgba(200,127,10,.10);
-    --green:#1B9A63; --green-soft:rgba(27,154,99,.10);
-    --red:#D8434B; --red-soft:rgba(216,67,75,.10);
-    --text-hi:#111827; --text-mid:#4B5670; --text-low:#8792A6;
-    --shadow:0 10px 28px rgba(16,24,40,.08);
+  html[data-theme="dark"]{
+    --bg:#0F1720; --panel:#161F29; --panel-2:#1C2733; --line:#28333F;
+    --text:#EAF0F5; --muted:#8FA1B3; --track:#1C2733;
+    --bg-glow-1: rgba(240,169,58,0.08); --bg-glow-2: rgba(53,196,161,0.06);
+  }
+  html[data-theme="light"]{
+    --bg:#F6F3EC; --panel:#FFFFFF; --panel-2:#F1EDE2; --line:#E1DACB;
+    --text:#1C2430; --muted:#66707C; --track:#EDE8DB;
+    --bg-glow-1: rgba(201,122,43,0.08); --bg-glow-2: rgba(30,158,130,0.07);
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text-hi);font-family:'Inter',sans-serif;transition:background .2s,color .2s;}
-  body{padding:0 0 60px;}
-  ::selection{background:var(--amber);color:#0A1120;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, var(--bg-glow-1), transparent 60%),
+      radial-gradient(1000px 500px at 100% 0%, var(--bg-glow-2), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;
+    min-height:100vh;
+    padding-bottom:60px;
+    transition:background-color .2s, color .2s;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:36px 20px 0;}
 
-  /* ---------- Ticker ---------- */
-  .ticker-wrap{background:#08101F;border-bottom:1px solid #1A2740;overflow:hidden;white-space:nowrap;padding:9px 0;position:relative;}
-  .ticker-wrap::before{content:"LIVE";position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#08101F 55%,transparent);z-index:2;padding:9px 18px 9px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:2px;color:#F5A524;display:flex;align-items:center;gap:6px;}
-  .ticker-track{display:inline-flex;animation:scrollTicker 42s linear infinite;padding-left:100%;}
-  @keyframes scrollTicker{from{transform:translateX(0);}to{transform:translateX(-100%);}}
-  .ticker-item{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:#93A5C6;padding:0 22px;display:inline-flex;align-items:center;gap:8px;border-right:1px solid #1A2740;}
-  .ticker-item b{color:#EAF0FB;font-weight:600;}
-  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:none;}
-  .dot.on{background:var(--green);box-shadow:0 0 6px var(--green);}
-  .dot.off{background:var(--red);box-shadow:0 0 6px var(--red);}
-  .tick-up{color:#35D68A;} .tick-down{color:#FB5A5A;}
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:8px;}
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand .dot{
+    width:14px;height:14px;border-radius:50%;background:var(--gold);
+    animation:pulse 2.2s infinite; flex-shrink:0;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(var(--gold-rgb),.55);}
+    70%{box-shadow:0 0 0 14px rgba(var(--gold-rgb),0);}
+    100%{box-shadow:0 0 0 0 rgba(var(--gold-rgb),0);}
+  }
+  h1{font-family:'Space Grotesk',sans-serif;font-size:1.7rem;margin:0;letter-spacing:-0.01em;}
+  .sub{color:var(--muted);font-size:.92rem;margin-top:4px;}
+  .actions{display:flex;gap:10px;align-items:center;}
+  button{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:.85rem;
+    background:var(--panel-2);color:var(--text);border:1px solid var(--line);
+    padding:10px 16px;border-radius:8px;cursor:pointer;transition:.15s;
+  }
+  button:hover{border-color:var(--gold);color:var(--gold);}
+  button.primary{background:var(--gold);color:#241a06;border-color:var(--gold);}
+  button.primary:hover{background:#ffbb52;color:#241a06;}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  #themeBtn{width:42px;height:42px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;border-radius:50%;}
 
-  /* ---------- Header ---------- */
-  header{max-width:1360px;margin:0 auto;padding:24px 24px 16px;display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;}
-  .brand-eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:3px;color:var(--amber-dim);text-transform:uppercase;margin:0 0 6px;}
-  h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;margin:0;letter-spacing:-.5px;}
-  .header-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-  .sync-info{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-mid);}
-  .sync-info .clock{font-size:19px;color:var(--text-hi);font-weight:600;}
-  .status-pill{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1.5px;padding:6px 12px;border-radius:20px;display:inline-flex;align-items:center;gap:6px;font-weight:600;}
-  .status-pill.live{background:var(--green-soft);color:var(--green);}
-  .status-pill.pre{background:var(--amber-soft);color:var(--amber);}
-  .status-pill.closed{background:var(--line-soft);color:var(--text-low);}
-  .status-pill .pulse{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 1.4s infinite;}
-  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
-  .icon-btn{background:var(--bg-panel);border:1px solid var(--line);color:var(--text-hi);border-radius:8px;padding:9px 14px;font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:border-color .15s,background .15s;}
-  .icon-btn:hover{border-color:var(--amber);}
+  #dropzone{
+    margin-top:26px;border:1.5px dashed var(--line);border-radius:14px;
+    background:var(--panel);padding:30px 24px;text-align:center; transition:.15s; cursor:pointer;
+  }
+  #dropzone.drag{border-color:var(--gold);background:var(--panel-2);}
+  #dropzone .icon{font-family:'IBM Plex Mono',monospace;font-size:1.6rem;color:var(--gold);margin-bottom:8px;}
+  #dropzone p{margin:4px 0;color:var(--muted);font-size:.9rem;}
+  #dropzone .hint{font-size:.78rem;color:var(--muted);opacity:.75;}
+  #fileInput{display:none;}
+  #status{margin-top:14px;font-size:.85rem;color:var(--muted);min-height:1.2em;}
+  #status.err{color:var(--red);}
 
-  main{max-width:1360px;margin:0 auto;padding:0 24px;}
+  #overview{display:none;margin-top:30px;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:14px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .card .label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);}
+  .card .value{font-family:'IBM Plex Mono',monospace;font-size:1.55rem;font-weight:600;margin-top:6px;color:var(--gold);}
+  .card .value.teal{color:var(--teal);}
+  .card .note{font-size:.75rem;color:var(--muted);margin-top:4px;}
 
-  /* ---------- Avatar strip ---------- */
-  .avatar-panel{background:var(--bg-panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:18px;box-shadow:var(--shadow);}
-  .avatar-strip{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 8px;}
-  .avatar-strip::-webkit-scrollbar{height:6px;}
-  .avatar-strip::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
-  .avatar-btn{flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;border:none;cursor:pointer;width:92px;padding:6px 4px;border-radius:10px;transition:background .15s;font-family:'Inter',sans-serif;}
-  .avatar-btn:hover{background:var(--bg-panel-alt);}
-  .avatar-ring-wrap{position:relative;width:60px;height:60px;}
-  .avatar-initials{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;color:var(--text-hi);}
-  .pulse-dot{position:absolute;bottom:2px;right:2px;width:11px;height:11px;border-radius:50%;background:var(--green);border:2px solid var(--bg-panel);animation:pulse 1.2s infinite;}
-  .avatar-name{font-size:11.5px;font-weight:600;color:var(--text-hi);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:88px;}
-  .avatar-sub{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-low);}
-  .avatar-sub.active{color:var(--green);}
-  tr.highlight td{background:var(--amber-soft) !important;}
+  .section-title{font-family:'Space Grotesk',sans-serif;font-size:1.1rem;margin:34px 0 4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .section-title .n{
+    font-family:'IBM Plex Mono',monospace;font-size:.72rem;background:var(--panel-2);
+    color:var(--muted);padding:3px 8px;border-radius:6px;border:1px solid var(--line);
+  }
 
-  /* ---------- Entry panel ---------- */
-  .panel{background:var(--bg-panel);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:18px;box-shadow:var(--shadow);}
-  .panel-title{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;color:var(--text-hi);margin:0 0 4px;display:flex;align-items:center;gap:8px;}
-  .panel-sub{font-size:12.5px;color:var(--text-mid);margin:0 0 14px;}
-  .report-caption{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--amber);background:var(--amber-soft);display:inline-block;padding:6px 14px;border-radius:6px;margin-bottom:14px;font-weight:600;}
+  .chart-panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-top:16px;}
+  .chart-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-top:16px;}
+  .chart-box{position:relative;height:260px;}
+  @media (max-width:800px){.chart-grid{grid-template-columns:1fr;}}
 
-  .entry-table{width:100%;border-collapse:collapse;margin-bottom:12px;}
-  .entry-table th{text-align:left;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--text-low);padding:7px 8px;border-bottom:1px solid var(--line);font-weight:600;}
-  .entry-table td{padding:5px 6px;border-bottom:1px solid var(--line-soft);}
-  .entry-table input{width:100%;background:var(--bg-panel-alt);border:1px solid var(--line);color:var(--text-hi);border-radius:6px;padding:8px 9px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;}
-  .entry-table input[type="text"]{font-family:'Inter',sans-serif;font-weight:600;}
-  .entry-table input:focus{outline:none;border-color:var(--amber);}
-  .sno-cell{color:var(--text-low);font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:center;width:34px;}
-  .row-del{background:transparent;border:none;color:var(--text-low);cursor:pointer;font-size:15px;padding:6px;border-radius:6px;}
-  .row-del:hover{color:var(--red);background:var(--red-soft);}
+  .company{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-top:16px;overflow:hidden;}
+  .company-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px;background:var(--panel-2);}
+  .company-head-left{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .company-name-input{
+    font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:600;background:transparent;
+    border:none;border-bottom:1px dashed var(--line);color:var(--text);padding:2px 2px;min-width:140px;
+  }
+  .company-name-input:focus{outline:none;border-bottom-color:var(--gold);}
+  .company-stats{display:flex;gap:16px;font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--muted);flex-wrap:wrap;}
+  .company-stats b{color:var(--text);}
+  .remove-btn{background:transparent;border:1px solid var(--line);color:var(--muted);width:30px;height:30px;padding:0;border-radius:8px;font-size:.9rem;}
+  .remove-btn:hover{color:var(--red);border-color:var(--red);}
 
-  .entry-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
-  button.big{font-family:'Inter',sans-serif;font-weight:600;font-size:13px;cursor:pointer;border-radius:7px;border:1px solid transparent;padding:11px 20px;transition:opacity .15s,transform .1s;}
-  button.big:active{transform:scale(.98);}
-  .btn-primary{background:var(--amber);color:#0A1120;border-color:var(--amber);}
-  .btn-primary:hover{opacity:.9;}
-  .btn-ghost{background:transparent;color:var(--text-mid);border-color:var(--line);}
-  .btn-ghost:hover{color:var(--text-hi);border-color:var(--text-mid);}
-  .status-line{margin-top:12px;font-family:'IBM Plex Mono',monospace;font-size:12px;min-height:18px;}
-  .status-line.ok{color:var(--green);}
-  .status-line.err{color:var(--red);}
+  table{width:100%;border-collapse:collapse;font-size:.86rem;}
+  thead th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:10px 20px;border-bottom:1px solid var(--line);font-weight:600;}
+  tbody td{padding:11px 20px;border-bottom:1px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:.84rem;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody td.name{font-family:'Inter',sans-serif;font-weight:500;}
+  tbody tr:hover{background:rgba(var(--gold-rgb),0.04);}
+  .rank{font-family:'IBM Plex Mono',monospace;color:var(--muted);}
+  .rank.medal{font-size:1.05rem;}
+  tr.top1 td{background:rgba(var(--gold-rgb),0.08);}
+  tr.top2 td, tr.top3 td{background:rgba(var(--teal-rgb),0.05);}
 
-  /* ---------- KPI grid ---------- */
-  .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px;}
-  @media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(3,1fr);}}
-  @media(max-width:640px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
-  .kpi{background:var(--bg-panel);border:1px solid var(--line);border-radius:12px;padding:16px;position:relative;overflow:hidden;box-shadow:var(--shadow);}
-  .kpi::before{content:"";position:absolute;top:0;left:0;width:3px;height:100%;background:var(--amber-dim);}
-  .kpi.good::before{background:var(--green);} .kpi.bad::before{background:var(--red);}
-  .kpi-label{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-low);margin-bottom:8px;}
-  .kpi-val{font-family:'IBM Plex Mono',monospace;font-size:25px;font-weight:600;color:var(--text-hi);}
-  .kpi-val span{font-size:14px;color:var(--text-mid);font-weight:400;}
+  .bar-cell{display:flex;align-items:center;gap:8px;min-width:150px;}
+  .bar-track{flex:1;height:6px;background:var(--track);border-radius:4px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--gold),var(--teal));}
+  .bar-pct{width:42px;text-align:right;color:var(--text);}
 
-  /* ---------- Charts ---------- */
-  .timeline-card{background:var(--bg-panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:14px;box-shadow:var(--shadow);}
-  .timeline-head h3{font-family:'Space Grotesk',sans-serif;font-size:15px;margin:0;}
-  .timeline-head p{margin:0 0 6px;font-size:11.5px;color:var(--text-low);}
-  .svg-chart{flex:1;min-height:0;}
-  .svg-chart svg{width:100%;height:100%;display:block;overflow:visible;}
-  .timeline-svg{height:220px;flex:none;}
-  .axis-row{display:flex;justify-content:space-between;padding:2px 4px 0;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-low);}
-  .legend-row{display:flex;gap:16px;align-items:center;margin-top:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-mid);}
-  .legend-row .swatch{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;}
-  .empty-chart{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-low);font-size:12px;font-family:'IBM Plex Mono',monospace;}
-  .chart-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px;}
-  @media(max-width:980px){.chart-grid{grid-template-columns:1fr;}}
-  .chart-card{background:var(--bg-panel);border:1px solid var(--line);border-radius:12px;padding:18px;min-height:280px;display:flex;flex-direction:column;box-shadow:var(--shadow);}
-  .chart-card h3{font-family:'Space Grotesk',sans-serif;font-size:13.5px;margin:0 0 4px;color:var(--text-hi);}
-  .chart-card p{margin:0 0 12px;font-size:11.5px;color:var(--text-low);}
+  footer{max-width:1180px;margin:50px auto 0;padding:0 20px;color:var(--muted);font-size:.78rem;line-height:1.6;}
+  details{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;}
+  summary{cursor:pointer;color:var(--gold);font-weight:600;font-size:.85rem;}
+  details ul{padding-left:18px;}
 
-  /* ---------- Leaderboard + table ---------- */
-  .lower-grid{display:grid;grid-template-columns:280px 1fr;gap:14px;margin-bottom:18px;align-items:start;}
-  @media(max-width:900px){.lower-grid{grid-template-columns:1fr;}}
-  .leaderboard{background:var(--bg-panel);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:var(--shadow);}
-  .lb-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);}
-  .lb-row:last-child{border-bottom:none;}
-  .lb-rank{width:22px;height:22px;border-radius:50%;background:var(--bg-panel-alt);color:var(--text-mid);font-family:'IBM Plex Mono',monospace;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none;font-weight:600;}
-  .lb-rank.r1{background:var(--amber);color:#0A1120;}
-  .lb-rank.r2{background:var(--line);color:var(--text-hi);}
-  .lb-rank.r3{background:var(--amber-soft);color:var(--amber);}
-  .lb-name{flex:1;font-size:12.5px;font-weight:600;}
-  .lb-rate{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--green);}
-
-  .table-panel{background:var(--bg-panel);border:1px solid var(--line);border-radius:12px;padding:18px 18px 6px;box-shadow:var(--shadow);}
-  .table-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
-  select{background:var(--bg-panel-alt);color:var(--text-hi);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:12px;}
-  table.roster{width:100%;border-collapse:collapse;font-size:12.5px;}
-  table.roster th{text-align:left;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--text-low);padding:8px 10px;border-bottom:1px solid var(--line);font-weight:600;}
-  table.roster td{padding:10px;border-bottom:1px solid var(--line-soft);font-family:'IBM Plex Mono',monospace;color:var(--text-hi);transition:background .3s;}
-  table.roster tr:hover td{background:var(--bg-panel-alt);}
-  td.name-cell{font-family:'Inter',sans-serif;font-weight:600;display:flex;align-items:center;gap:8px;}
-  td.rate-good{color:var(--green);} td.rate-bad{color:var(--red);}
-  .empty-note{color:var(--text-low);font-size:12.5px;padding:20px 4px 24px;text-align:center;}
-  footer{max-width:1360px;margin:0 auto;padding:10px 24px 0;color:var(--text-low);font-size:11px;font-family:'IBM Plex Mono',monospace;}
+  @media print{
+    body{background:#fff;color:#111;}
+    #dropzone,.actions,footer,details,.remove-btn{display:none !important;}
+    .company{border-color:#ccc;break-inside:avoid;}
+  }
+  @media (max-width:600px){
+    .company-head{flex-direction:column;align-items:flex-start;}
+    table{font-size:.78rem;}
+    thead th,tbody td{padding:8px 12px;}
+  }
 </style>
 </head>
 <body>
-
-  <div class="ticker-wrap"><div class="ticker-track" id="tickerTrack"></div></div>
-
+<div class="wrap">
   <header>
-    <div>
-      <p class="brand-eyebrow">Dispatch / Telecalling Ops</p>
-      <h1>Control Board</h1>
-    </div>
-    <div class="header-right">
-      <span class="status-pill" id="marketPill"></span>
-      <button class="icon-btn" id="exportBtn" title="Download today's data as a file">⬇ Export</button>
-      <label class="icon-btn" id="importLabel" title="Load a previously exported file" style="cursor:pointer;">
-        ⬆ Import<input type="file" id="importInput" accept="application/json" style="display:none;">
-      </label>
-      <button class="icon-btn" id="themeToggle">🌙 Dark mode</button>
-      <div class="sync-info">
-        <div class="clock" id="clock">--:--</div>
-        <div id="syncLabel">no reports logged yet</div>
+    <div class="brand">
+      <span class="dot"></span>
+      <div>
+        <h1>Call Line</h1>
+        <div class="sub">Telecalling leaderboard — runs entirely in your browser, no AI, no server.</div>
       </div>
+    </div>
+    <div class="actions">
+      <button id="printBtn" disabled>Print / Save PDF</button>
+      <button id="resetBtn" disabled>Clear all</button>
+      <button id="themeBtn" title="Toggle light / dark theme">🌙</button>
     </div>
   </header>
 
-  <main>
+  <div id="dropzone">
+    <div class="icon">☎</div>
+    <p><strong>Drop one or more call reports here</strong>, or click to browse</p>
+    <p class="hint">Works with raw click-to-call exports (Agent Name, B Party No, Record1, Total Duration in seconds) or pre-summarised sheets. Upload one file per company — e.g. one for GEV Calling, one for Absolute Capital — and each becomes its own leaderboard.</p>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple>
+  </div>
+  <div id="status"></div>
 
-    <div class="avatar-panel">
-      <p class="panel-title">☎️ Who's on the line</p>
-      <p class="panel-sub">Ring shows each agent's response rate for the latest report · green pulse means they dialed calls in this report</p>
-      <div class="avatar-strip" id="avatarStrip"></div>
-    </div>
+  <div id="overview">
+    <div class="section-title">Overall summary <span class="n" id="companyCount"></span></div>
+    <div class="cards" id="overviewCards"></div>
 
-    <div class="panel">
-      <p class="panel-title">📝 Log this report</p>
-      <p class="panel-sub">Fill in the numbers every ~20 minutes, 9:30 AM – 5:30 PM, and save. No screenshots or uploads needed.</p>
-      <div class="report-caption" id="reportCaption">CALL REPORT OF —</div>
-
-      <table class="entry-table">
-        <thead>
-          <tr>
-            <th style="width:34px;">S.No</th>
-            <th>Name</th>
-            <th>No. of Call Dialed</th>
-            <th>No. of Respond</th>
-            <th>Avg Talk Time (sec.)</th>
-            <th>Total Duration (sec.)</th>
-            <th style="width:30px;"></th>
-          </tr>
-        </thead>
-        <tbody id="entryRows"></tbody>
-      </table>
-
-      <datalist id="agentNames"></datalist>
-
-      <div class="entry-actions">
-        <button class="big btn-ghost" id="addRowBtn">+ Add agent row</button>
-        <button class="big btn-primary" id="saveReportBtn">Save report to board</button>
-      </div>
-      <div class="status-line" id="statusLine"></div>
-    </div>
-
-    <div class="kpi-grid" id="kpiGrid"></div>
-
-    <div class="timeline-card">
-      <div class="timeline-head">
-        <h3>Today's call timeline</h3>
-        <p>9:30 AM – 5:30 PM · one point roughly every 20 minutes, as reports are logged</p>
-      </div>
-      <div id="timelineChart" class="svg-chart timeline-svg"></div>
-      <div id="timelineAxis" class="axis-row"></div>
-    </div>
-
-    <div class="chart-grid">
-      <div class="chart-card">
-        <h3>Dialed vs responded</h3>
-        <p>By agent, current report</p>
-        <div id="agentBarChart" class="svg-chart"></div>
-      </div>
-      <div class="chart-card">
-        <h3>Responded vs not responded</h3>
-        <p>Totals for the current report</p>
-        <div id="statusDonut" class="svg-chart"></div>
-      </div>
-      <div class="chart-card">
-        <h3>Total duration by agent</h3>
-        <p>Seconds, current report</p>
-        <div id="durationChart" class="svg-chart"></div>
+    <div class="chart-panel" id="comparePanel" style="display:none">
+      <div class="section-title" style="margin:0">Company comparison</div>
+      <div class="chart-grid">
+        <div class="chart-box"><canvas id="compareBarChart"></canvas></div>
+        <div class="chart-box"><canvas id="compareRateChart"></canvas></div>
       </div>
     </div>
+  </div>
 
-    <div class="lower-grid">
-      <div class="leaderboard">
-        <p class="panel-title" style="margin-bottom:12px;">🏆 Leaderboard</p>
-        <div id="leaderboardBody"></div>
-      </div>
+  <div id="companies"></div>
 
-      <div class="table-panel">
-        <div class="table-head">
-          <p class="panel-title" style="margin:0;">Agent roster</p>
-          <select id="snapshotPicker"></select>
-        </div>
-        <div style="overflow-x:auto;">
-          <table class="roster" id="rosterTable">
-            <thead>
-              <tr><th>Agent</th><th>Dialed</th><th>Responded</th><th>Not Responded</th><th>Response Rate</th><th>Avg Talktime</th><th>Total Duration</th></tr>
-            </thead>
-            <tbody id="rosterBody"></tbody>
-          </table>
-        </div>
-        <div class="empty-note" id="emptyNote" style="display:none;">No report selected yet — fill in the form above and save to populate the board.</div>
-      </div>
-    </div>
-
-  </main>
-
-  <footer id="footerNote"></footer>
+  <footer>
+    <details>
+      <summary>How the numbers are calculated</summary>
+      <ul>
+        <li><b>Raw call-log files</b> (columns like Agent Name, B Party No, Record1, Total Duration(In Seconds)):
+          <ul>
+            <li><b>Calls dialed</b> = number of log rows for that agent (each row is one dial attempt, identified by the B Party No column).</li>
+            <li><b>Responded</b> = rows where <b>Record1</b> holds an actual recording link. Rows marked "No Voice" / blank are not counted as responded.</li>
+            <li><b>Total duration</b> = sum of "Total Duration (In Seconds)" for the <i>responded</i> rows only, converted to minutes.</li>
+            <li><b>Avg talk time (sec)</b> = that same seconds total ÷ number of responded calls.</li>
+            <li><b>Response rate</b> = responded ÷ dialed × 100.</li>
+          </ul>
+        </li>
+        <li><b>Pre-summarised sheets</b> (columns already named Name / No. of Call dialed / No. of responded / Avg talk time / Total Duration) are used as-is.</li>
+        <li>Everything above is plain arithmetic run in your browser — no AI model, no data sent anywhere.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>Notes on hosting this on GitHub Pages</summary>
+      <ul>
+        <li><b>No backend, so no AI is possible here</b> — GitHub Pages only serves static files. This page uses formula-based analytics instead of a model; that's the right fit for pure static hosting.</li>
+        <li><b>Data never leaves the browser.</b> Files are parsed locally with SheetJS; nothing is uploaded. Still, don't commit real call reports into the public repo — only commit the tool itself.</li>
+        <li><b>Public by default.</b> Free GitHub Pages sites are reachable by anyone with the URL (private Pages needs GitHub Enterprise).</li>
+        <li><b>Vendor the libraries for reliability.</b> This page loads SheetJS and Chart.js from cdnjs pinned to fixed versions. For long-term use, download both files into your repo so the tool still works if the CDN is blocked.</li>
+        <li><b>Large files:</b> everything runs client-side, so very large exports (tens of thousands of rows) may be slow — fine for daily/weekly reports like these.</li>
+        <li><b>Theme choice</b> follows your system preference by default and can be toggled with the button top-right; it resets on reload since the page stores nothing.</li>
+      </ul>
+    </details>
+  </footer>
+</div>
 
 <script>
-/* ========================= State ========================= */
-let snapshots = [];
-let selectedIdx = -1;
-let rowSeq = 0;
-const DEFAULT_AGENTS = ["Nandha","Vidya","Selin","Abdul","Karthikeyan","PRIYA","Sharmila","Vignesha Gurudas"];
+/* ---------------- theme ---------------- */
+const root = document.documentElement;
+const themeBtn = document.getElementById('themeBtn');
+function setTheme(t){
+  root.setAttribute('data-theme', t);
+  themeBtn.textContent = t === 'dark' ? '🌙' : '☀️';
+  refreshAllCharts();
+}
+setTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+themeBtn.addEventListener('click', () => setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
 
-/* ========================= Theme (in-memory, no external bridge) ========================= */
-function initTheme(){
-  applyTheme('dark', false);
-}
-function applyTheme(theme){
-  document.documentElement.setAttribute('data-theme', theme);
-  document.getElementById('themeToggle').textContent = theme==='dark' ? '☀️ Light mode' : '🌙 Dark mode';
-  renderAll();
-}
-document.getElementById('themeToggle').addEventListener('click', ()=>{
-  const cur = document.documentElement.getAttribute('data-theme');
-  applyTheme(cur==='dark' ? 'light' : 'dark');
+/* ---------------- state ---------------- */
+let companies = []; // { id, name, teams:[{label, callers:[{name,dialed,responded,talktime,duration,rate}]}] }
+let compareCharts = [];
+let uid = 0;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const statusEl = document.getElementById('status');
+const overviewEl = document.getElementById('overview');
+const overviewCards = document.getElementById('overviewCards');
+const companyCountEl = document.getElementById('companyCount');
+const companiesEl = document.getElementById('companies');
+const printBtn = document.getElementById('printBtn');
+const resetBtn = document.getElementById('resetBtn');
+const comparePanel = document.getElementById('comparePanel');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
 });
-
-/* ========================= Clock + market status ========================= */
-function marketStatus(){
-  const now = new Date();
-  const start = new Date(now); start.setHours(9,30,0,0);
-  const end = new Date(now); end.setHours(17,30,0,0);
-  if(now < start) return {label:'PRE-MARKET', cls:'pre'};
-  if(now > end) return {label:'CLOSED', cls:'closed'};
-  return {label:'LIVE', cls:'live'};
-}
-function tickClock(){
-  const d = new Date();
-  document.getElementById('clock').textContent = d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  const ms = marketStatus();
-  const pill = document.getElementById('marketPill');
-  pill.className = 'status-pill ' + ms.cls;
-  pill.innerHTML = (ms.cls==='live' ? '<span class="pulse"></span>' : '') + ms.label;
-  document.getElementById('reportCaption').textContent = 'CALL REPORT OF ' + d.toLocaleDateString([], {day:'numeric', month:'numeric', year:'numeric'});
-}
-setInterval(tickClock, 1000); tickClock();
-
-/* ========================= Data: kept in memory, saved/loaded via Export/Import file ========================= */
-function loadAllSnapshots(){
-  // Snapshots live only in the `snapshots` variable for this browser tab.
-  // Use Export / Import (below) to carry them across page reloads or devices.
-  return snapshots;
-}
-
-/* ========================= Helpers ========================= */
-function fmtSec(s){
-  s = Math.round(Number(s)||0);
-  if(s <= 0) return '0:00';
-  const m = Math.floor(s/60), r = s%60;
-  return m + ':' + String(r).padStart(2,'0');
-}
-function sum(arr, key){ return arr.reduce((a,r)=> a + (Number(r[key])||0), 0); }
-function computeAgentRate(a){
-  const dialed = Number(a.dialed)||0;
-  if(dialed === 0) return null;
-  return (Number(a.responded)/dialed)*100;
-}
-function initials(name){
-  return name.split(' ').filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
-}
-
-/* ========================= Entry form ========================= */
-const entryRowsEl = document.getElementById('entryRows');
-
-function addRow(prefill){
-  prefill = prefill || {};
-  rowSeq++;
-  const tr = document.createElement('tr');
-  tr.dataset.rowId = rowSeq;
-  tr.innerHTML = `
-    <td class="sno-cell">${entryRowsEl.children.length + 1}</td>
-    <td><input type="text" class="f-name" list="agentNames" placeholder="Agent name" value="${prefill.name||''}"></td>
-    <td><input type="number" class="f-dialed" min="0" placeholder="0" value="${prefill.dialed ?? ''}"></td>
-    <td><input type="number" class="f-responded" min="0" placeholder="0" value="${prefill.responded ?? ''}"></td>
-    <td><input type="number" step="0.01" min="0" class="f-talktime" placeholder="0.00" value="${prefill.avg_talktime_sec ?? ''}"></td>
-    <td><input type="number" min="0" class="f-duration" placeholder="0" value="${prefill.total_duration_sec ?? ''}"></td>
-    <td><button class="row-del" title="Remove row">✕</button></td>
-  `;
-  tr.querySelector('.row-del').addEventListener('click', ()=>{
-    tr.remove();
-    renumberRows();
-  });
-  entryRowsEl.appendChild(tr);
-}
-function renumberRows(){
-  [...entryRowsEl.children].forEach((tr, i)=>{ tr.querySelector('.sno-cell').textContent = i+1; });
-}
-document.getElementById('addRowBtn').addEventListener('click', ()=> addRow());
-
-function seedEntryForm(){
-  const names = (snapshots.length ? snapshots[snapshots.length-1].agents.map(a=>a.name) : DEFAULT_AGENTS);
-  entryRowsEl.innerHTML = '';
-  names.forEach(n=> addRow({name:n}));
-  const dl = document.getElementById('agentNames');
-  dl.innerHTML = DEFAULT_AGENTS.map(n=>`<option value="${n}">`).join('');
-}
-
-document.getElementById('saveReportBtn').addEventListener('click', async ()=>{
-  const rows = [...entryRowsEl.children];
-  const agents = [];
-  for(const tr of rows){
-    const name = tr.querySelector('.f-name').value.trim();
-    if(!name) continue;
-    agents.push({
-      name,
-      dialed: Number(tr.querySelector('.f-dialed').value) || 0,
-      responded: Number(tr.querySelector('.f-responded').value) || 0,
-      avg_talktime_sec: Number(tr.querySelector('.f-talktime').value) || 0,
-      total_duration_sec: Number(tr.querySelector('.f-duration').value) || 0
-    });
-  }
-  const statusLine = document.getElementById('statusLine');
-  if(agents.length === 0){
-    statusLine.className = 'status-line err';
-    statusLine.textContent = 'Add at least one agent with a name before saving.';
-    return;
-  }
-  const ts = Date.now();
-  const snap = {ts, agents};
-  snapshots.push(snap);
-  snapshots.sort((a,b)=> a.ts - b.ts);
-  selectedIdx = snapshots.length - 1;
-  statusLine.className = 'status-line ok';
-  statusLine.textContent = `Saved report with ${agents.length} agents at ${new Date(ts).toLocaleTimeString()}. Remember to export before closing this tab.`;
-  renderAll();
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFiles(e.target.files); });
+resetBtn.addEventListener('click', () => {
+  companies = [];
+  fileInput.value = '';
+  statusEl.textContent = '';
+  overviewEl.style.display = 'none';
+  companiesEl.innerHTML = '';
+  printBtn.disabled = true;
+  resetBtn.disabled = true;
 });
+printBtn.addEventListener('click', () => window.print());
 
-/* ========================= Work-day timeline ========================= */
-function getWorkSlots(base){
-  const slots = [];
-  const start = new Date(base); start.setHours(9,30,0,0);
-  const end = new Date(base); end.setHours(17,30,0,0);
-  let t = new Date(start);
-  while(t <= end){ slots.push(new Date(t)); t = new Date(t.getTime() + 20*60000); }
-  return slots;
-}
-function nearestSlotIndex(slots, ts){
-  const d = new Date(ts);
-  let best=0, bestDiff=Infinity;
-  slots.forEach((s,i)=>{ const diff = Math.abs(s.getTime()-d.getTime()); if(diff<bestDiff){bestDiff=diff;best=i;} });
-  return best;
-}
-function buildTimelineSeries(){
-  const now = new Date();
-  const slots = getWorkSlots(now);
-  const labels = slots.map(s=> s.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}));
-  const rateBySlot = new Array(slots.length).fill(null);
-  const dialedBySlot = new Array(slots.length).fill(null);
-  snapshots.forEach(s=>{
-    const idx = nearestSlotIndex(slots, s.ts);
-    const dialed = sum(s.agents,'dialed'), responded = sum(s.agents,'responded');
-    rateBySlot[idx] = dialed>0 ? +(responded/dialed*100).toFixed(1) : 0;
-    dialedBySlot[idx] = dialed;
-  });
-  return {labels, rateBySlot, dialedBySlot};
+function handleFiles(fileList) {
+  Array.from(fileList).forEach(readOneFile);
 }
 
-/* ========================= Rendering ========================= */
-function renderTicker(snap){
-  const track = document.getElementById('tickerTrack');
-  if(!snap || !snap.agents.length){ track.innerHTML = '<span class="ticker-item">Waiting for first report…</span>'; return; }
-  const items = snap.agents.map(a=>{
-    const rate = computeAgentRate(a);
-    const rateTxt = rate===null ? '—' : rate.toFixed(0)+'%';
-    const cls = rate===null ? '' : (rate>=60?'tick-up':(rate<40?'tick-down':''));
-    return `<span class="ticker-item"><span class="dot ${a.dialed>0?'on':'off'}"></span><b>${a.name}</b> ${a.responded}/${a.dialed} <span class="${cls}">${rateTxt}</span></span>`;
-  }).join('');
-  track.innerHTML = items + items;
-}
-
-function renderAvatars(snap){
-  const wrap = document.getElementById('avatarStrip');
-  if(!snap || !snap.agents.length){ wrap.innerHTML = '<p style="color:var(--text-low);font-size:12.5px;">No agents yet.</p>'; return; }
-  const r = 26, circ = 2*Math.PI*r;
-  wrap.innerHTML = snap.agents.map(a=>{
-    const rate = computeAgentRate(a);
-    const pct = rate===null ? 0 : Math.max(0, Math.min(100, rate));
-    const dash = (pct/100)*circ;
-    const active = Number(a.dialed) > 0;
-    const ringColor = active ? 'var(--green)' : 'var(--line)';
-    return `<button class="avatar-btn" data-agent="${a.name}">
-      <span class="avatar-ring-wrap">
-        <svg width="60" height="60" viewBox="0 0 60 60">
-          <circle cx="30" cy="30" r="${r}" fill="none" style="stroke:var(--line-soft)" stroke-width="4"/>
-          <circle cx="30" cy="30" r="${r}" fill="none" style="stroke:${ringColor}" stroke-width="4" stroke-dasharray="${dash} ${circ}" stroke-linecap="round" transform="rotate(-90 30 30)"/>
-        </svg>
-        <span class="avatar-initials">${initials(a.name)}</span>
-        ${active ? '<span class="pulse-dot"></span>' : ''}
-      </span>
-      <span class="avatar-name">${a.name.split(' ')[0]}</span>
-      <span class="avatar-sub ${active?'active':''}">${fmtSec(a.total_duration_sec)} total</span>
-    </button>`;
-  }).join('');
-
-  wrap.querySelectorAll('.avatar-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const name = btn.getAttribute('data-agent');
-      const row = document.querySelector(`tr[data-agent-row="${CSS.escape(name)}"]`);
-      if(row){ row.scrollIntoView({behavior:'smooth', block:'center'}); row.classList.add('highlight'); setTimeout(()=> row.classList.remove('highlight'), 1400); }
-    });
-  });
-}
-
-function renderKPIs(snap){
-  const grid = document.getElementById('kpiGrid');
-  if(!snap){ grid.innerHTML=''; return; }
-  const agents = snap.agents;
-  const dialed = sum(agents,'dialed');
-  const responded = sum(agents,'responded');
-  const notResponded = dialed - responded;
-  const rate = dialed>0 ? (responded/dialed)*100 : 0;
-  const totalDuration = sum(agents,'total_duration_sec');
-  const cards = [
-    {label:'Calls dialed', val:dialed, sub:'', cls:''},
-    {label:'Responded', val:responded, sub:'', cls:'good'},
-    {label:'Not responded', val:notResponded, sub:'', cls: notResponded>0?'bad':'good'},
-    {label:'Response rate', val:rate.toFixed(1)+'%', sub:'', cls: rate>=60?'good':(rate<40?'bad':'')},
-    {label:'Total duration', val:fmtSec(totalDuration), sub:'', cls:''},
-  ];
-  grid.innerHTML = cards.map(c=>`<div class="kpi ${c.cls}"><div class="kpi-label">${c.label}</div><div class="kpi-val">${c.val}<span>${c.sub}</span></div></div>`).join('');
-}
-
-function renderRoster(snap){
-  const body = document.getElementById('rosterBody');
-  const empty = document.getElementById('emptyNote');
-  if(!snap){ body.innerHTML=''; empty.style.display='block'; return; }
-  empty.style.display='none';
-  body.innerHTML = snap.agents.map(a=>{
-    const rate = computeAgentRate(a);
-    const rateTxt = rate===null ? '—' : rate.toFixed(0)+'%';
-    const rateCls = rate===null ? '' : (rate>=60?'rate-good':(rate<40?'rate-bad':''));
-    return `<tr data-agent-row="${a.name}">
-      <td class="name-cell"><span class="dot ${a.dialed>0?'on':'off'}"></span>${a.name}</td>
-      <td>${a.dialed ?? 0}</td><td>${a.responded ?? 0}</td><td>${(a.dialed||0)-(a.responded||0)}</td>
-      <td class="${rateCls}">${rateTxt}</td><td>${fmtSec(a.avg_talktime_sec)}</td><td>${fmtSec(a.total_duration_sec)}</td>
-    </tr>`;
-  }).join('');
-}
-
-function renderLeaderboard(snap){
-  const el = document.getElementById('leaderboardBody');
-  if(!snap){ el.innerHTML='<p style="color:var(--text-low);font-size:12.5px;">No data yet.</p>'; return; }
-  const ranked = snap.agents.filter(a=> (Number(a.dialed)||0) > 0)
-    .map(a=>({name:a.name, rate:computeAgentRate(a)}))
-    .sort((a,b)=> b.rate - a.rate).slice(0,6);
-  if(!ranked.length){ el.innerHTML = '<p style="color:var(--text-low);font-size:12.5px;">No calls dialed in this report.</p>'; return; }
-  el.innerHTML = ranked.map((r,i)=>`
-    <div class="lb-row">
-      <span class="lb-rank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</span>
-      <span class="lb-name">${r.name}</span>
-      <span class="lb-rate">${r.rate.toFixed(0)}%</span>
-    </div>`).join('');
-}
-
-function chartColors(){
-  const cs = getComputedStyle(document.documentElement);
-  return {
-    amber: cs.getPropertyValue('--amber').trim(), green: cs.getPropertyValue('--green').trim(),
-    red: cs.getPropertyValue('--red').trim(), grid: cs.getPropertyValue('--line-soft').trim(),
-    text: cs.getPropertyValue('--text-mid').trim(), panel: cs.getPropertyValue('--bg-panel').trim()
-  };
-}
-
-/* Small self-contained SVG chart kit — no external library, so nothing to fail to load. */
-const SVG_W = 600, SVG_H = 220;
-
-function pathFromPoints(pts){
-  // pts: array of {x,y} or null (gap). Splits into separate segments at nulls.
-  const segs = []; let cur = [];
-  pts.forEach(p=>{ if(p===null){ if(cur.length) segs.push(cur); cur=[]; } else cur.push(p); });
-  if(cur.length) segs.push(cur);
-  return segs.map(seg => 'M ' + seg.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L ')).join(' ');
-}
-
-function renderTimelineChart(){
-  const el = document.getElementById('timelineChart');
-  const axisEl = document.getElementById('timelineAxis');
-  const c = chartColors();
-  const {labels, rateBySlot, dialedBySlot} = buildTimelineSeries();
-  const n = labels.length;
-  if(n < 2){ el.innerHTML = '<div class="empty-chart">Log a report to start the timeline.</div>'; axisEl.innerHTML=''; return; }
-
-  const maxDialed = Math.max(10, ...dialedBySlot.filter(v=>v!==null));
-  const padL = 6, padR = 6, padT = 12, padB = 10;
-  const w = SVG_W - padL - padR, h = SVG_H - padT - padB;
-  const x = i => padL + (i/(n-1))*w;
-
-  const ratePts = rateBySlot.map((v,i)=> v===null ? null : {x:x(i), y: padT + h - (v/100)*h});
-  const dialedPts = dialedBySlot.map((v,i)=> v===null ? null : {x:x(i), y: padT + h - (v/maxDialed)*h});
-
-  const ratePath = pathFromPoints(ratePts);
-  const dialedPath = pathFromPoints(dialedPts);
-
-  // area fill under rate line (per segment)
-  let areaPath = '';
-  let cur = [];
-  ratePts.forEach((p,i)=>{
-    if(p===null){ if(cur.length>1) areaPath += segToArea(cur, padT+h); cur=[]; }
-    else cur.push(p);
-  });
-  if(cur.length>1) areaPath += segToArea(cur, padT+h);
-  function segToArea(seg, baseline){
-    const d = 'M ' + seg.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L ');
-    return d + ` L ${seg[seg.length-1].x.toFixed(1)},${baseline} L ${seg[0].x.toFixed(1)},${baseline} Z `;
-  }
-
-  const gridLines = [0,25,50,75,100].map(pct=>{
-    const y = padT + h - (pct/100)*h;
-    return `<line x1="${padL}" y1="${y}" x2="${SVG_W-padR}" y2="${y}" stroke="${c.grid}" stroke-width="1"/>`;
-  }).join('');
-
-  const ratePoints = ratePts.map(p=> p ? `<circle cx="${p.x}" cy="${p.y}" r="2.6" fill="${c.amber}"><title>Response rate</title></circle>` : '').join('');
-  const dialedPoints = dialedPts.map(p=> p ? `<circle cx="${p.x}" cy="${p.y}" r="2.6" fill="${c.green}"><title>Calls dialed</title></circle>` : '').join('');
-
-  // "now" marker
-  const now = new Date();
-  let nowX = null;
-  const start = new Date(now); start.setHours(9,30,0,0);
-  const end = new Date(now); end.setHours(17,30,0,0);
-  if(now >= start && now <= end){
-    const frac = (now - start) / (end - start);
-    nowX = padL + frac*w;
-  }
-  const nowLine = nowX!==null ? `<line x1="${nowX}" y1="${padT}" x2="${nowX}" y2="${padT+h}" stroke="${c.amber}" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>` : '';
-
-  el.innerHTML = `
-    <svg viewBox="0 0 ${SVG_W} ${SVG_H}" preserveAspectRatio="none">
-      ${gridLines}
-      <path d="${areaPath}" fill="${c.amber}" opacity=".14"/>
-      <path d="${dialedPath}" fill="none" stroke="${c.green}" stroke-width="2" stroke-dasharray="4 3"/>
-      <path d="${ratePath}" fill="none" stroke="${c.amber}" stroke-width="2.2"/>
-      ${nowLine}
-      ${dialedPoints}
-      ${ratePoints}
-    </svg>
-    <div class="legend-row">
-      <span><span class="swatch" style="background:${c.amber}"></span>Response rate %</span>
-      <span><span class="swatch" style="background:${c.green}"></span>Calls dialed</span>
-    </div>`;
-
-  const step = Math.max(1, Math.ceil(n/9));
-  axisEl.innerHTML = labels.map((l,i)=> i % step === 0 ? `<span>${l}</span>` : '').join('');
-}
-
-function renderBarChart(snap){
-  const el = document.getElementById('agentBarChart');
-  const c = chartColors();
-  if(!snap || !snap.agents.length){ el.innerHTML = '<div class="empty-chart">No report selected.</div>'; return; }
-  const agents = snap.agents;
-  const maxVal = Math.max(1, ...agents.map(a=> Math.max(Number(a.dialed)||0, Number(a.responded)||0)));
-  const padL=4, padR=4, padT=8, padB=22, w=SVG_W-padL-padR, h=SVG_H-padT-padB;
-  const groupW = w/agents.length;
-  const barW = Math.min(16, groupW/3.2);
-
-  const bars = agents.map((a,i)=>{
-    const gx = padL + i*groupW + groupW/2;
-    const dialed = Number(a.dialed)||0, responded = Number(a.responded)||0;
-    const dh = (dialed/maxVal)*h, rh = (responded/maxVal)*h;
-    const dx = gx - barW - 2, rx = gx + 2;
-    return `
-      <rect x="${dx}" y="${padT+h-dh}" width="${barW}" height="${dh}" rx="2" fill="${c.amber}"><title>${a.name} dialed: ${dialed}</title></rect>
-      <rect x="${rx}" y="${padT+h-rh}" width="${barW}" height="${rh}" rx="2" fill="${c.green}"><title>${a.name} responded: ${responded}</title></rect>
-      <text x="${gx}" y="${SVG_H-6}" text-anchor="middle" font-size="9" fill="${c.text}" font-family="IBM Plex Mono, monospace">${a.name.split(' ')[0].slice(0,8)}</text>`;
-  }).join('');
-
-  el.innerHTML = `
-    <svg viewBox="0 0 ${SVG_W} ${SVG_H}" preserveAspectRatio="none">
-      <line x1="${padL}" y1="${padT+h}" x2="${SVG_W-padR}" y2="${padT+h}" stroke="${c.grid}" stroke-width="1"/>
-      ${bars}
-    </svg>
-    <div class="legend-row">
-      <span><span class="swatch" style="background:${c.amber}"></span>Dialed</span>
-      <span><span class="swatch" style="background:${c.green}"></span>Responded</span>
-    </div>`;
-}
-
-function renderDonut(snap){
-  const el = document.getElementById('statusDonut');
-  const c = chartColors();
-  const responded = snap ? sum(snap.agents,'responded') : 0;
-  const notResponded = snap ? Math.max(0, sum(snap.agents,'dialed') - responded) : 0;
-  const total = responded + notResponded;
-  const cx=110, cy=110, r=78, sw=26, circ=2*Math.PI*r;
-  if(total === 0){
-    el.innerHTML = `<svg viewBox="0 0 220 220"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${c.grid}" stroke-width="${sw}"/></svg><div class="legend-row" style="justify-content:center;">No calls dialed yet</div>`;
-    return;
-  }
-  const respFrac = responded/total;
-  const respLen = respFrac*circ;
-  el.innerHTML = `
-    <svg viewBox="0 0 220 220">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${c.red}" stroke-width="${sw}"/>
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${c.green}" stroke-width="${sw}"
-        stroke-dasharray="${respLen} ${circ}" stroke-linecap="butt" transform="rotate(-90 ${cx} ${cy})"/>
-      <text x="${cx}" y="${cy-4}" text-anchor="middle" font-size="26" font-weight="700" fill="${c.text}" font-family="Space Grotesk, sans-serif">${(respFrac*100).toFixed(0)}%</text>
-      <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="10" fill="${c.text}" font-family="IBM Plex Mono, monospace">responded</text>
-    </svg>
-    <div class="legend-row" style="justify-content:center;">
-      <span><span class="swatch" style="background:${c.green}"></span>Responded (${responded})</span>
-      <span><span class="swatch" style="background:${c.red}"></span>Not responded (${notResponded})</span>
-    </div>`;
-}
-
-function renderDurationChart(snap){
-  const el = document.getElementById('durationChart');
-  const c = chartColors();
-  const active = snap ? snap.agents.filter(a=> (Number(a.total_duration_sec)||0) > 0) : [];
-  if(!active.length){ el.innerHTML = '<div class="empty-chart">No duration logged yet.</div>'; return; }
-  const maxVal = Math.max(1, ...active.map(a=> Number(a.total_duration_sec)||0));
-  const rowH = Math.min(28, (SVG_H-10)/active.length);
-  const labelW = 62, padR = 10;
-  const barsAreaW = SVG_W - labelW - padR;
-
-  const rows = active.map((a,i)=>{
-    const val = Number(a.total_duration_sec)||0;
-    const bw = (val/maxVal)*barsAreaW;
-    const y = 6 + i*rowH;
-    return `
-      <text x="${labelW-8}" y="${y+rowH*0.62}" text-anchor="end" font-size="9.5" fill="${c.text}" font-family="IBM Plex Mono, monospace">${a.name.split(' ')[0].slice(0,9)}</text>
-      <rect x="${labelW}" y="${y+rowH*0.18}" width="${Math.max(2,bw)}" height="${rowH*0.64}" rx="3" fill="${c.amber}"><title>${a.name}: ${fmtSec(val)}</title></rect>
-      <text x="${labelW+bw+6}" y="${y+rowH*0.62}" font-size="9.5" fill="${c.text}" font-family="IBM Plex Mono, monospace">${fmtSec(val)}</text>`;
-  }).join('');
-
-  el.innerHTML = `<svg viewBox="0 0 ${SVG_W} ${Math.max(SVG_H, 6+active.length*rowH+6)}" preserveAspectRatio="none">${rows}</svg>`;
-}
-
-function renderSnapshotPicker(){
-  const picker = document.getElementById('snapshotPicker');
-  picker.innerHTML = snapshots.map((s,i)=>{
-    const label = new Date(s.ts).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
-    return `<option value="${i}">${label}</option>`;
-  }).join('');
-  picker.value = selectedIdx;
-}
-
-function renderAll(){
-  const latest = snapshots.length ? snapshots[snapshots.length-1] : null;
-  if(selectedIdx < 0 && snapshots.length) selectedIdx = snapshots.length - 1;
-  const selected = selectedIdx>=0 ? snapshots[selectedIdx] : null;
-
-  renderTicker(latest);
-  renderAvatars(latest);
-  renderKPIs(selected);
-  renderRoster(selected);
-  renderLeaderboard(selected);
-  renderTimelineChart();
-  renderBarChart(selected);
-  renderDonut(selected);
-  renderDurationChart(selected);
-  renderSnapshotPicker();
-
-  const syncLabel = document.getElementById('syncLabel');
-  const footer = document.getElementById('footerNote');
-  if(latest){
-    syncLabel.textContent = 'last logged ' + new Date(latest.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-    footer.textContent = snapshots.length + ' report' + (snapshots.length===1?'':'s') + ' logged today · next entry due in ~20 min';
-  }else{
-    syncLabel.textContent = 'no reports logged yet';
-    footer.textContent = '';
-  }
-}
-
-document.getElementById('snapshotPicker').addEventListener('change', e=>{
-  selectedIdx = Number(e.target.value);
-  const selected = snapshots[selectedIdx];
-  renderKPIs(selected); renderRoster(selected); renderBarChart(selected); renderDonut(selected); renderDurationChart(selected); renderLeaderboard(selected);
-});
-
-/* ========================= Export / Import (works in any browser, no bridge needed) ========================= */
-document.getElementById('exportBtn').addEventListener('click', ()=>{
-  const blob = new Blob([JSON.stringify(snapshots, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const dateStr = new Date().toISOString().slice(0,10);
-  a.href = url;
-  a.download = `telecalling-report-${dateStr}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-});
-
-document.getElementById('importInput').addEventListener('change', (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
+function readOneFile(file) {
+  statusEl.className = '';
+  statusEl.textContent = 'Reading ' + file.name + '…';
   const reader = new FileReader();
-  reader.onload = ()=>{
-    try{
-      const loaded = JSON.parse(reader.result);
-      if(!Array.isArray(loaded)) throw new Error('File does not contain a snapshot list');
-      snapshots = loaded;
-      snapshots.sort((a,b)=> a.ts - b.ts);
-      selectedIdx = snapshots.length - 1;
-      seedEntryForm();
+  reader.onload = e => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const teams = extractTeams(wb);
+      if (!teams.length) {
+        showError('No recognizable telecalling data found in "' + file.name + '".');
+        return;
+      }
+      companies.push({ id: 'c' + (uid++), name: prettifyFilename(file.name), teams });
+      statusEl.className = '';
+      statusEl.textContent = 'Loaded ' + file.name + '.';
       renderAll();
-    }catch(err){
-      alert('Could not read that file: ' + err.message);
+      printBtn.disabled = false;
+      resetBtn.disabled = false;
+    } catch (err) {
+      showError('Could not read "' + file.name + '". (' + err.message + ')');
     }
   };
-  reader.readAsText(file);
-  e.target.value = '';
-});
-
-/* ========================= Init ========================= */
-function init(){
-  initTheme();
-  seedEntryForm();
-  renderAll();
+  reader.onerror = () => showError('Failed to read "' + file.name + '" from disk.');
+  reader.readAsArrayBuffer(file);
 }
-init();
+
+function showError(msg) { statusEl.className = 'err'; statusEl.textContent = msg; }
+
+function prettifyFilename(name) {
+  return name.replace(/\.[^/.]+$/, '').replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/* ---------------- parsing ---------------- */
+const SIMPLE_MAP = [
+  { key: 'name',      test: h => /name/.test(h) && !/agent/.test(h) },
+  { key: 'dialed',    test: h => /no\.?\s*of\s*call|dial/.test(h) && !/status/.test(h) },
+  { key: 'responded', test: h => /respond/.test(h) },
+  { key: 'talktime',  test: h => /talk/.test(h) },
+  { key: 'duration',  test: h => /duration/.test(h) && !/second/.test(h) },
+];
+
+function findHeaderRowGeneric(rows, matchers, minHits) {
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const row = rows[i].map(c => String(c || '').toLowerCase().trim());
+    const hits = matchers.filter(m => row.some(cell => m.test(cell)));
+    if (hits.length >= minHits) return i;
+  }
+  return -1;
+}
+
+function mapColumnsGeneric(headerRow, matchers) {
+  const norm = headerRow.map(c => String(c || '').toLowerCase().trim());
+  const map = {};
+  matchers.forEach(m => { const idx = norm.findIndex(cell => m.test(cell)); if (idx > -1) map[m.key] = idx; });
+  return map;
+}
+
+function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+
+function extractTeams(wb) {
+  const teams = [];
+  wb.SheetNames.forEach(sheetName => {
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+    if (!rows.length) return;
+
+    // try raw call-log format first (Agent Name / B Party No / Record1 / Total Duration seconds)
+    const rawTeam = parseRawCallLog(rows, sheetName);
+    if (rawTeam) { teams.push(rawTeam); return; }
+
+    // fall back to pre-summarised format
+    const headerIdx = findHeaderRowGeneric(rows, SIMPLE_MAP, 3);
+    if (headerIdx === -1) return;
+    const colMap = mapColumnsGeneric(rows[headerIdx], SIMPLE_MAP);
+    if (colMap.name === undefined || colMap.dialed === undefined || colMap.responded === undefined) return;
+
+    const callers = [];
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const r = rows[i];
+      const name = String(r[colMap.name] || '').trim();
+      if (!name) continue;
+      const dialed = num(r[colMap.dialed]);
+      const responded = num(r[colMap.responded]);
+      const talktime = colMap.talktime !== undefined ? num(r[colMap.talktime]) : 0;
+      const duration = colMap.duration !== undefined ? num(r[colMap.duration]) : 0;
+      const rate = dialed > 0 ? (responded / dialed) * 100 : 0;
+      callers.push({ name, dialed, responded, talktime, duration, rate });
+    }
+    if (callers.length) {
+      let label = sheetName;
+      for (let i = 0; i < headerIdx; i++) {
+        const joined = rows[i].join(' ').trim();
+        if (joined.length > 8) { label = joined; break; }
+      }
+      teams.push({ label, callers });
+    }
+  });
+  return teams;
+}
+
+function parseRawCallLog(rows, sheetName) {
+  const headerRow = rows[0].map(c => String(c || '').trim());
+  const normLower = headerRow.map(c => c.toLowerCase());
+  const idxAgent = normLower.findIndex(c => /agent\s*name/.test(c));
+  const idxRecord1 = normLower.findIndex(c => /record\s*1/.test(c));
+  const idxDurationSec = normLower.findIndex(c => c.startsWith('total duration'));
+  const idxBParty = normLower.findIndex(c => /b\s*party\s*no/.test(c));
+  if (idxAgent === -1 || idxRecord1 === -1 || idxDurationSec === -1 || idxBParty === -1) return null;
+
+  const agg = {}; // name -> {dialed, responded, durSec}
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const name = String(r[idxAgent] || '').trim();
+    if (!name) continue;
+    if (!agg[name]) agg[name] = { dialed: 0, responded: 0, durSec: 0 };
+    agg[name].dialed++;
+    const rec = String(r[idxRecord1] || '').trim();
+    const isResponded = /^https?:\/\//i.test(rec);
+    if (isResponded) {
+      agg[name].responded++;
+      agg[name].durSec += num(r[idxDurationSec]);
+    }
+  }
+  const callers = Object.keys(agg).map(name => {
+    const a = agg[name];
+    return {
+      name,
+      dialed: a.dialed,
+      responded: a.responded,
+      talktime: a.responded > 0 ? Math.round((a.durSec / a.responded) * 10) / 10 : 0,
+      duration: Math.round((a.durSec / 60) * 100) / 100,
+      rate: a.dialed > 0 ? (a.responded / a.dialed) * 100 : 0,
+    };
+  });
+  if (!callers.length) return null;
+  return { label: sheetName, callers };
+}
+
+/* ---------------- render ---------------- */
+function destroyCompareCharts() { compareCharts.forEach(c => c.destroy()); compareCharts = []; }
+let chartRegistry = []; // {chart, kind, ctxData} for theme refresh
+
+function chartColors() {
+  const dark = root.getAttribute('data-theme') === 'dark';
+  return {
+    text: dark ? '#8FA1B3' : '#66707C',
+    grid: dark ? '#28333F' : '#E1DACB',
+    gold: '#F0A93A',
+    teal: '#35C4A1',
+    red: '#E2586B',
+  };
+}
+
+function renderAll() {
+  companyCountEl.textContent = companies.length + ' compan' + (companies.length === 1 ? 'y' : 'ies');
+
+  // ---- overall ----
+  let allDialed = 0, allResponded = 0, allDuration = 0, allCallers = 0, talkSum = 0, talkN = 0, best = null;
+  companies.forEach(co => co.teams.forEach(t => t.callers.forEach(c => {
+    allDialed += c.dialed; allResponded += c.responded; allDuration += c.duration; allCallers++;
+    if (c.talktime) { talkSum += c.talktime; talkN++; }
+    if (c.dialed > 0 && (!best || c.rate > best.rate)) best = { ...c, company: co.name };
+  })));
+  const overallRate = allDialed > 0 ? (allResponded / allDialed * 100) : 0;
+  const avgTalk = talkN > 0 ? (talkSum / talkN) : 0;
+
+  overviewCards.innerHTML = `
+    <div class="card"><div class="label">Calls dialed</div><div class="value">${allDialed}</div></div>
+    <div class="card"><div class="label">Calls responded</div><div class="value teal">${allResponded}</div></div>
+    <div class="card"><div class="label">Overall response rate</div><div class="value">${overallRate.toFixed(1)}%</div></div>
+    <div class="card"><div class="label">Total talk duration</div><div class="value teal">${allDuration.toFixed(1)} <span style="font-size:.9rem;color:var(--muted)">min</span></div></div>
+    <div class="card"><div class="label">Avg talk time / call</div><div class="value">${avgTalk.toFixed(0)} <span style="font-size:.9rem;color:var(--muted)">sec</span></div></div>
+    <div class="card"><div class="label">Top performer</div><div class="value teal" style="font-size:1.05rem;font-family:Inter,sans-serif;">${best ? best.name : '—'}</div><div class="note">${best ? best.rate.toFixed(1) + '% · ' + best.company : ''}</div></div>
+  `;
+  overviewEl.style.display = 'block';
+
+  destroyCompareCharts();
+  chartRegistry = [];
+  if (companies.length > 1) {
+    comparePanel.style.display = 'block';
+    renderCompareCharts();
+  } else {
+    comparePanel.style.display = 'none';
+  }
+
+  // ---- per-company ----
+  companiesEl.innerHTML = '';
+  companies.forEach(co => renderCompany(co));
+}
+
+function renderCompareCharts() {
+  const colors = chartColors();
+  const labels = companies.map(c => c.name);
+  const dialedData = companies.map(co => sumField(co, 'dialed'));
+  const respondedData = companies.map(co => sumField(co, 'responded'));
+  const rateData = companies.map(co => {
+    const d = sumField(co, 'dialed'), r = sumField(co, 'responded');
+    return d > 0 ? +(r / d * 100).toFixed(1) : 0;
+  });
+
+  const ctx1 = document.getElementById('compareBarChart').getContext('2d');
+  const c1 = new Chart(ctx1, {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Dialed', data: dialedData, backgroundColor: colors.gold, borderRadius: 6 },
+      { label: 'Responded', data: respondedData, backgroundColor: colors.teal, borderRadius: 6 },
+    ]},
+    options: baseChartOptions(colors, 'Dialed vs responded by company')
+  });
+  compareCharts.push(c1);
+
+  const ctx2 = document.getElementById('compareRateChart').getContext('2d');
+  const c2 = new Chart(ctx2, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: rateData, backgroundColor: [colors.gold, colors.teal, colors.red, '#7C8CF8', '#F87CB0'] }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: colors.text, font: { family: 'Inter' } } },
+        title: { display: true, text: 'Response rate % by company', color: colors.text, font: { family: 'Space Grotesk', size: 13 } }
+      }
+    }
+  });
+  compareCharts.push(c2);
+}
+
+function sumField(co, field) {
+  return co.teams.reduce((s, t) => s + t.callers.reduce((s2, c) => s2 + c[field], 0), 0);
+}
+
+function baseChartOptions(colors, titleText) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom', labels: { color: colors.text, font: { family: 'Inter' } } },
+      title: { display: true, text: titleText, color: colors.text, font: { family: 'Space Grotesk', size: 13 } }
+    },
+    scales: {
+      x: { ticks: { color: colors.text }, grid: { color: colors.grid } },
+      y: { ticks: { color: colors.text }, grid: { color: colors.grid }, beginAtZero: true }
+    }
+  };
+}
+
+function renderCompany(co) {
+  const allCallers = co.teams.flatMap(t => t.callers);
+  const dialed = allCallers.reduce((s, c) => s + c.dialed, 0);
+  const responded = allCallers.reduce((s, c) => s + c.responded, 0);
+  const duration = allCallers.reduce((s, c) => s + c.duration, 0);
+  const rate = dialed > 0 ? (responded / dialed * 100) : 0;
+
+  const leaderboard = [...allCallers].sort((a, b) => b.rate - a.rate || b.responded - a.responded);
+
+  const block = document.createElement('div');
+  block.className = 'company';
+  const chartId1 = 'bar_' + co.id, chartId2 = 'donut_' + co.id;
+  block.innerHTML = `
+    <div class="company-head">
+      <div class="company-head-left">
+        <input class="company-name-input" value="${escapeAttr(co.name)}" data-id="${co.id}">
+        <div class="company-stats">
+          <span>Dialed <b>${dialed}</b></span>
+          <span>Responded <b>${responded}</b></span>
+          <span>Response rate <b>${rate.toFixed(1)}%</b></span>
+          <span>Duration <b>${duration.toFixed(1)} min</b></span>
+        </div>
+      </div>
+      <button class="remove-btn" data-id="${co.id}" title="Remove this company">✕</button>
+    </div>
+    <div style="padding:16px 20px 0">
+      <div class="chart-grid">
+        <div class="chart-box"><canvas id="${chartId1}"></canvas></div>
+        <div class="chart-box"><canvas id="${chartId2}"></canvas></div>
+      </div>
+    </div>
+    <div style="padding:8px 0 4px">
+      <table>
+        <thead>
+          <tr><th>Rank</th><th>Name</th><th>Dialed</th><th>Responded</th><th>Response rate</th><th>Avg talk (sec)</th><th>Duration (min)</th></tr>
+        </thead>
+        <tbody>
+          ${leaderboard.map((c, i) => `
+            <tr class="${i === 0 ? 'top1' : i < 3 ? 'top2' : ''}">
+              <td class="rank medal">${medal(i)}</td>
+              <td class="name">${escapeHtml(c.name)}</td>
+              <td>${c.dialed}</td>
+              <td>${c.responded}</td>
+              <td>
+                <div class="bar-cell">
+                  <div class="bar-track"><div class="bar-fill" style="width:${Math.min(c.rate,100)}%"></div></div>
+                  <span class="bar-pct">${c.rate.toFixed(0)}%</span>
+                </div>
+              </td>
+              <td>${c.talktime || '—'}</td>
+              <td>${c.duration || '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  companiesEl.appendChild(block);
+
+  block.querySelector('.company-name-input').addEventListener('input', e => {
+    co.name = e.target.value;
+  });
+  block.querySelector('.remove-btn').addEventListener('click', () => {
+    companies = companies.filter(c => c.id !== co.id);
+    renderAll();
+  });
+
+  const colors = chartColors();
+  const barCtx = document.getElementById(chartId1).getContext('2d');
+  const barChart = new Chart(barCtx, {
+    type: 'bar',
+    data: {
+      labels: leaderboard.map(c => c.name),
+      datasets: [
+        { label: 'Dialed', data: leaderboard.map(c => c.dialed), backgroundColor: colors.gold, borderRadius: 5 },
+        { label: 'Responded', data: leaderboard.map(c => c.responded), backgroundColor: colors.teal, borderRadius: 5 },
+      ]
+    },
+    options: baseChartOptions(colors, 'Dialed vs responded by agent')
+  });
+
+  const notResponded = dialed - responded;
+  const donutCtx = document.getElementById(chartId2).getContext('2d');
+  const donutChart = new Chart(donutCtx, {
+    type: 'doughnut',
+    data: { labels: ['Responded', 'Not responded'], datasets: [{ data: [responded, notResponded], backgroundColor: [colors.teal, colors.grid] }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: colors.text, font: { family: 'Inter' } } },
+        title: { display: true, text: 'Responded share', color: colors.text, font: { family: 'Space Grotesk', size: 13 } }
+      }
+    }
+  });
+
+  chartRegistry.push({ chart: barChart });
+  chartRegistry.push({ chart: donutChart });
+  compareCharts.push(barChart, donutChart);
+}
+
+function refreshAllCharts() {
+  if (companies.length) renderAll();
+}
+
+function medal(i) {
+  if (i === 0) return '🥇';
+  if (i === 1) return '🥈';
+  if (i === 2) return '🥉';
+  return (i + 1) + '';
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function escapeAttr(s) { return escapeHtml(s); }
 </script>
 </body>
 </html>
