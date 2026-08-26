@@ -6,8 +6,11 @@
 <title>Call Line — Telecalling Leaderboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<!-- Vendored locally on purpose: no CDN dependency, so the tool never breaks due to a
+     blocked/renamed/offline CDN. Keep xlsx.full.min.js and chart.umd.js next to this
+     HTML file (same folder) when you host or open it. -->
+<script src="xlsx.full.min.js"></script>
+<script src="chart.umd.js"></script>
 <style>
   :root{
     --gold:#F0A93A; --gold-rgb:240,169,58;
@@ -213,6 +216,11 @@
 </div>
 
 <script>
+/* ---------------- state (declared first: nothing below may run before this) ---------------- */
+let companies = []; // { id, name, teams:[{label, callers:[{name,dialed,responded,talktime,duration,rate}]}] }
+let compareCharts = [];
+let uid = 0;
+
 /* ---------------- theme ---------------- */
 const root = document.documentElement;
 const themeBtn = document.getElementById('themeBtn');
@@ -224,10 +232,17 @@ function setTheme(t){
 setTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 themeBtn.addEventListener('click', () => setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
 
-/* ---------------- state ---------------- */
-let companies = []; // { id, name, teams:[{label, callers:[{name,dialed,responded,talktime,duration,rate}]}] }
-let compareCharts = [];
-let uid = 0;
+/* ---------------- library availability check ---------------- */
+if (typeof XLSX === 'undefined') {
+  showBootError('Could not load xlsx.full.min.js. Make sure that file sits in the same folder as this HTML file.');
+} else if (typeof Chart === 'undefined') {
+  showBootError('Could not load chart.umd.js — the leaderboard will still work, but charts will be hidden. Make sure that file sits in the same folder as this HTML file.');
+}
+function showBootError(msg) {
+  const el = document.getElementById('status');
+  el.className = 'err';
+  el.textContent = msg;
+}
 
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
@@ -264,6 +279,10 @@ function handleFiles(fileList) {
 }
 
 function readOneFile(file) {
+  if (typeof XLSX === 'undefined') {
+    showError('xlsx.full.min.js did not load, so files cannot be read. Put xlsx.full.min.js in the same folder as this HTML file, then reload the page.');
+    return;
+  }
   statusEl.className = '';
   statusEl.textContent = 'Reading ' + file.name + '…';
   const reader = new FileReader();
@@ -442,9 +461,9 @@ function renderAll() {
 
   destroyCompareCharts();
   chartRegistry = [];
-  if (companies.length > 1) {
+  if (companies.length > 1 && typeof Chart !== 'undefined') {
     comparePanel.style.display = 'block';
-    renderCompareCharts();
+    try { renderCompareCharts(); } catch (e) { console.error('Chart render failed:', e); comparePanel.style.display = 'none'; }
   } else {
     comparePanel.style.display = 'none';
   }
@@ -533,7 +552,7 @@ function renderCompany(co) {
       </div>
       <button class="remove-btn" data-id="${co.id}" title="Remove this company">✕</button>
     </div>
-    <div style="padding:16px 20px 0">
+    <div style="padding:16px 20px 0" id="chartsWrap_${co.id}">
       <div class="chart-grid">
         <div class="chart-box"><canvas id="${chartId1}"></canvas></div>
         <div class="chart-box"><canvas id="${chartId2}"></canvas></div>
@@ -575,37 +594,48 @@ function renderCompany(co) {
     renderAll();
   });
 
-  const colors = chartColors();
-  const barCtx = document.getElementById(chartId1).getContext('2d');
-  const barChart = new Chart(barCtx, {
-    type: 'bar',
-    data: {
-      labels: leaderboard.map(c => c.name),
-      datasets: [
-        { label: 'Dialed', data: leaderboard.map(c => c.dialed), backgroundColor: colors.gold, borderRadius: 5 },
-        { label: 'Responded', data: leaderboard.map(c => c.responded), backgroundColor: colors.teal, borderRadius: 5 },
-      ]
-    },
-    options: baseChartOptions(colors, 'Dialed vs responded by agent')
-  });
+  if (typeof Chart === 'undefined') {
+    const wrap = document.getElementById('chartsWrap_' + co.id);
+    if (wrap) wrap.style.display = 'none';
+    return;
+  }
+  try {
+    const colors = chartColors();
+    const barCtx = document.getElementById(chartId1).getContext('2d');
+    const barChart = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: leaderboard.map(c => c.name),
+        datasets: [
+          { label: 'Dialed', data: leaderboard.map(c => c.dialed), backgroundColor: colors.gold, borderRadius: 5 },
+          { label: 'Responded', data: leaderboard.map(c => c.responded), backgroundColor: colors.teal, borderRadius: 5 },
+        ]
+      },
+      options: baseChartOptions(colors, 'Dialed vs responded by agent')
+    });
 
-  const notResponded = dialed - responded;
-  const donutCtx = document.getElementById(chartId2).getContext('2d');
-  const donutChart = new Chart(donutCtx, {
-    type: 'doughnut',
-    data: { labels: ['Responded', 'Not responded'], datasets: [{ data: [responded, notResponded], backgroundColor: [colors.teal, colors.grid] }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom', labels: { color: colors.text, font: { family: 'Inter' } } },
-        title: { display: true, text: 'Responded share', color: colors.text, font: { family: 'Space Grotesk', size: 13 } }
+    const notResponded = dialed - responded;
+    const donutCtx = document.getElementById(chartId2).getContext('2d');
+    const donutChart = new Chart(donutCtx, {
+      type: 'doughnut',
+      data: { labels: ['Responded', 'Not responded'], datasets: [{ data: [responded, notResponded], backgroundColor: [colors.teal, colors.grid] }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { color: colors.text, font: { family: 'Inter' } } },
+          title: { display: true, text: 'Responded share', color: colors.text, font: { family: 'Space Grotesk', size: 13 } }
+        }
       }
-    }
-  });
+    });
 
-  chartRegistry.push({ chart: barChart });
-  chartRegistry.push({ chart: donutChart });
-  compareCharts.push(barChart, donutChart);
+    chartRegistry.push({ chart: barChart });
+    chartRegistry.push({ chart: donutChart });
+    compareCharts.push(barChart, donutChart);
+  } catch (e) {
+    console.error('Per-company chart render failed:', e);
+    const wrap = document.getElementById('chartsWrap_' + co.id);
+    if (wrap) wrap.style.display = 'none';
+  }
 }
 
 function refreshAllCharts() {
