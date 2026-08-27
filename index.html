@@ -93,6 +93,25 @@
     color:var(--muted);padding:3px 8px;border-radius:6px;border:1px solid var(--line);
   }
 
+  /* ---- Top leader banner ---- */
+  .top-leader{
+    margin-top:26px;border-radius:16px;padding:2px;
+    background:linear-gradient(120deg,var(--gold),var(--teal));
+  }
+  .top-leader-inner{
+    background:var(--panel);border-radius:14px;padding:22px 26px;
+    display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  }
+  .top-leader-left{display:flex;align-items:center;gap:18px;}
+  .top-leader-crown{font-size:2.2rem;line-height:1;}
+  .top-leader-tag{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);font-weight:600;}
+  .top-leader-name{font-family:'Space Grotesk',sans-serif;font-size:1.4rem;margin:2px 0 2px;}
+  .top-leader-company{font-size:.82rem;color:var(--muted);}
+  .top-leader-stats{display:flex;gap:22px;flex-wrap:wrap;}
+  .top-leader-stats .tl-stat{text-align:right;}
+  .top-leader-stats .tl-val{font-family:'IBM Plex Mono',monospace;font-size:1.3rem;font-weight:600;color:var(--teal);}
+  .top-leader-stats .tl-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+
   .chart-panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-top:16px;}
   .chart-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-top:16px;}
   .chart-box{position:relative;height:260px;}
@@ -169,16 +188,32 @@
   </div>
   <div id="status"></div>
 
+  <div id="topLeader" class="top-leader" style="display:none"></div>
+
   <div id="overview">
     <div class="section-title">Overall summary <span class="n" id="companyCount"></span></div>
     <div class="cards" id="overviewCards"></div>
+  </div>
 
-    <div class="chart-panel" id="comparePanel" style="display:none">
-      <div class="section-title" style="margin:0">Company comparison</div>
-      <div class="chart-grid">
-        <div class="chart-box"><canvas id="compareBarChart"></canvas></div>
-        <div class="chart-box"><canvas id="compareRateChart"></canvas></div>
+  <div id="mergedSection" style="display:none">
+    <div class="section-title">Combined leaderboard <span class="n">all companies merged</span></div>
+    <div class="company">
+      <div style="padding:8px 0 4px">
+        <table>
+          <thead>
+            <tr><th>Rank</th><th>Name</th><th>Company</th><th>Dialed</th><th>Responded</th><th>Response rate</th><th>Avg talk (sec)</th><th>Duration (min)</th></tr>
+          </thead>
+          <tbody id="mergedTableBody"></tbody>
+        </table>
       </div>
+    </div>
+  </div>
+
+  <div class="chart-panel" id="comparePanel" style="display:none">
+    <div class="section-title" style="margin:0">Company comparison</div>
+    <div class="chart-grid">
+      <div class="chart-box"><canvas id="compareBarChart"></canvas></div>
+      <div class="chart-box"><canvas id="compareRateChart"></canvas></div>
     </div>
   </div>
 
@@ -268,6 +303,9 @@ resetBtn.addEventListener('click', () => {
   fileInput.value = '';
   statusEl.textContent = '';
   overviewEl.style.display = 'none';
+  document.getElementById('topLeader').style.display = 'none';
+  document.getElementById('mergedSection').style.display = 'none';
+  comparePanel.style.display = 'none';
   companiesEl.innerHTML = '';
   printBtn.disabled = true;
   resetBtn.disabled = true;
@@ -458,6 +496,60 @@ function renderAll() {
     <div class="card"><div class="label">Top performer</div><div class="value teal" style="font-size:1.05rem;font-family:Inter,sans-serif;">${best ? best.name : '—'}</div><div class="note">${best ? best.rate.toFixed(1) + '% · ' + best.company : ''}</div></div>
   `;
   overviewEl.style.display = 'block';
+
+  // ---- top leader banner (shown first, above everything) ----
+  const topLeaderEl = document.getElementById('topLeader');
+  if (best) {
+    topLeaderEl.style.display = 'block';
+    topLeaderEl.innerHTML = `
+      <div class="top-leader-inner">
+        <div class="top-leader-left">
+          <div class="top-leader-crown">🏆</div>
+          <div>
+            <div class="top-leader-tag">Top leader across all companies</div>
+            <div class="top-leader-name">${escapeHtml(best.name)}</div>
+            <div class="top-leader-company">${escapeHtml(best.company)}</div>
+          </div>
+        </div>
+        <div class="top-leader-stats">
+          <div class="tl-stat"><div class="tl-val">${best.rate.toFixed(1)}%</div><div class="tl-label">Response rate</div></div>
+          <div class="tl-stat"><div class="tl-val">${best.responded}</div><div class="tl-label">Responded</div></div>
+          <div class="tl-stat"><div class="tl-val">${best.dialed}</div><div class="tl-label">Dialed</div></div>
+        </div>
+      </div>
+    `;
+  } else {
+    topLeaderEl.style.display = 'none';
+  }
+
+  // ---- merged leaderboard: every agent from every company, ranked together ----
+  const mergedSection = document.getElementById('mergedSection');
+  const mergedBody = document.getElementById('mergedTableBody');
+  const allAgents = [];
+  companies.forEach(co => co.teams.forEach(t => t.callers.forEach(c => allAgents.push({ ...c, company: co.name }))));
+  if (allAgents.length) {
+    mergedSection.style.display = 'block';
+    const mergedSorted = [...allAgents].sort((a, b) => b.rate - a.rate || b.responded - a.responded);
+    mergedBody.innerHTML = mergedSorted.map((c, i) => `
+      <tr class="${i === 0 ? 'top1' : i < 3 ? 'top2' : ''}">
+        <td class="rank medal">${medal(i)}</td>
+        <td class="name">${escapeHtml(c.name)}</td>
+        <td>${escapeHtml(c.company)}</td>
+        <td>${c.dialed}</td>
+        <td>${c.responded}</td>
+        <td>
+          <div class="bar-cell">
+            <div class="bar-track"><div class="bar-fill" style="width:${Math.min(c.rate,100)}%"></div></div>
+            <span class="bar-pct">${c.rate.toFixed(0)}%</span>
+          </div>
+        </td>
+        <td>${c.talktime || '—'}</td>
+        <td>${c.duration || '—'}</td>
+      </tr>
+    `).join('');
+  } else {
+    mergedSection.style.display = 'none';
+  }
 
   destroyCompareCharts();
   chartRegistry = [];
