@@ -93,25 +93,6 @@
     color:var(--muted);padding:3px 8px;border-radius:6px;border:1px solid var(--line);
   }
 
-  /* ---- Top leader banner ---- */
-  .top-leader{
-    margin-top:26px;border-radius:16px;padding:2px;
-    background:linear-gradient(120deg,var(--gold),var(--teal));
-  }
-  .top-leader-inner{
-    background:var(--panel);border-radius:14px;padding:22px 26px;
-    display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
-  }
-  .top-leader-left{display:flex;align-items:center;gap:18px;}
-  .top-leader-crown{font-size:2.2rem;line-height:1;}
-  .top-leader-tag{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);font-weight:600;}
-  .top-leader-name{font-family:'Space Grotesk',sans-serif;font-size:1.4rem;margin:2px 0 2px;}
-  .top-leader-company{font-size:.82rem;color:var(--muted);}
-  .top-leader-stats{display:flex;gap:22px;flex-wrap:wrap;}
-  .top-leader-stats .tl-stat{text-align:right;}
-  .top-leader-stats .tl-val{font-family:'IBM Plex Mono',monospace;font-size:1.3rem;font-weight:600;color:var(--teal);}
-  .top-leader-stats .tl-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
-
   .chart-panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-top:16px;}
   .chart-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-top:16px;}
   .chart-box{position:relative;height:260px;}
@@ -171,6 +152,7 @@
       <div>
         <h1>Call Line</h1>
         <div class="sub">Telecalling leaderboard — runs entirely in your browser, no AI, no server.</div>
+        <div class="sub" id="genTimestamp" style="margin-top:2px;"></div>
       </div>
     </div>
     <div class="actions">
@@ -188,26 +170,12 @@
   </div>
   <div id="status"></div>
 
-  <div id="topLeader" class="top-leader" style="display:none"></div>
-
   <div id="overview">
-    <div class="section-title">Overall summary <span class="n" id="companyCount"></span></div>
+    <div class="section-title">Overall summary <span class="n" id="companyCount"></span><span class="n" id="reportDateBadge" style="display:none"></span></div>
     <div class="cards" id="overviewCards"></div>
   </div>
 
-  <div id="mergedSection" style="display:none">
-    <div class="section-title">Combined leaderboard <span class="n">all companies merged</span></div>
-    <div class="company">
-      <div style="padding:8px 0 4px">
-        <table>
-          <thead>
-            <tr><th>Rank</th><th>Name</th><th>Company</th><th>Dialed</th><th>Responded</th><th>Response rate</th><th>Avg talk (sec)</th><th>Duration (min)</th></tr>
-          </thead>
-          <tbody id="mergedTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+  <div id="companyTables"></div>
 
   <div class="chart-panel" id="comparePanel" style="display:none">
     <div class="section-title" style="margin:0">Company comparison</div>
@@ -216,8 +184,6 @@
       <div class="chart-box"><canvas id="compareRateChart"></canvas></div>
     </div>
   </div>
-
-  <div id="companies"></div>
 
   <footer>
     <details>
@@ -285,10 +251,21 @@ const statusEl = document.getElementById('status');
 const overviewEl = document.getElementById('overview');
 const overviewCards = document.getElementById('overviewCards');
 const companyCountEl = document.getElementById('companyCount');
-const companiesEl = document.getElementById('companies');
+const companiesEl = document.getElementById('companyTables');
 const printBtn = document.getElementById('printBtn');
 const resetBtn = document.getElementById('resetBtn');
 const comparePanel = document.getElementById('comparePanel');
+const genTimestampEl = document.getElementById('genTimestamp');
+
+function updateGenTimestamp() {
+  const now = new Date();
+  const formatted = now.toLocaleString(undefined, {
+    weekday: 'short', day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+  genTimestampEl.textContent = 'Report generated: ' + formatted;
+}
+updateGenTimestamp();
 
 dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
@@ -303,8 +280,6 @@ resetBtn.addEventListener('click', () => {
   fileInput.value = '';
   statusEl.textContent = '';
   overviewEl.style.display = 'none';
-  document.getElementById('topLeader').style.display = 'none';
-  document.getElementById('mergedSection').style.display = 'none';
   comparePanel.style.display = 'none';
   companiesEl.innerHTML = '';
   printBtn.disabled = true;
@@ -415,7 +390,7 @@ function extractTeams(wb) {
         const joined = rows[i].join(' ').trim();
         if (joined.length > 8) { label = joined; break; }
       }
-      teams.push({ label, callers });
+      teams.push({ label, callers, dataDates: [] });
     }
   });
   return teams;
@@ -430,7 +405,13 @@ function parseRawCallLog(rows, sheetName) {
   const idxBParty = normLower.findIndex(c => /b\s*party\s*no/.test(c));
   if (idxAgent === -1 || idxRecord1 === -1 || idxDurationSec === -1 || idxBParty === -1) return null;
 
+  // Detect the call date column (e.g. "CALL START DATE") so the report can show
+  // which date(s) the data covers, not just when the report was generated.
+  let idxDate = normLower.findIndex(c => c === 'call start date');
+  if (idxDate === -1) idxDate = normLower.findIndex(c => /call\s*start\s*date/.test(c) && !/a\s*party|b\s*party/.test(c));
+
   const agg = {}; // name -> {dialed, responded, durSec}
+  const dateSet = new Set();
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     const name = String(r[idxAgent] || '').trim();
@@ -442,6 +423,10 @@ function parseRawCallLog(rows, sheetName) {
     if (isResponded) {
       agg[name].responded++;
       agg[name].durSec += num(r[idxDurationSec]);
+    }
+    if (idxDate !== -1) {
+      const d = String(r[idxDate] || '').trim();
+      if (d) dateSet.add(d);
     }
   }
   const callers = Object.keys(agg).map(name => {
@@ -456,12 +441,30 @@ function parseRawCallLog(rows, sheetName) {
     };
   });
   if (!callers.length) return null;
-  return { label: sheetName, callers };
+  return { label: sheetName, callers, dataDates: Array.from(dateSet) };
+}
+
+// Parses "DD/MM/YYYY" (also tolerates "D/M/YYYY" and "-" separators) into a sortable Date.
+function parseDMY(str) {
+  const m = String(str).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (!m) return null;
+  let [, d, mo, y] = m;
+  if (y.length === 2) y = '20' + y;
+  const dt = new Date(+y, +mo - 1, +d);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+// Given a list of "DD/MM/YYYY" strings, returns a human label: a single date, or a range.
+function dateRangeLabel(dateStrings) {
+  const parsed = dateStrings.map(s => ({ raw: s, dt: parseDMY(s) })).filter(x => x.dt);
+  if (!parsed.length) return null;
+  parsed.sort((a, b) => a.dt - b.dt);
+  const first = parsed[0].raw, last = parsed[parsed.length - 1].raw;
+  return first === last ? first : (first + ' – ' + last);
 }
 
 /* ---------------- render ---------------- */
 function destroyCompareCharts() { compareCharts.forEach(c => c.destroy()); compareCharts = []; }
-let chartRegistry = []; // {chart, kind, ctxData} for theme refresh
 
 function chartColors() {
   const dark = root.getAttribute('data-theme') === 'dark';
@@ -475,7 +478,20 @@ function chartColors() {
 }
 
 function renderAll() {
+  updateGenTimestamp();
   companyCountEl.textContent = companies.length + ' compan' + (companies.length === 1 ? 'y' : 'ies');
+
+  // ---- report date (the date the calls actually happened on, from the data itself) ----
+  const reportDateBadge = document.getElementById('reportDateBadge');
+  const allDates = [];
+  companies.forEach(co => co.teams.forEach(t => (t.dataDates || []).forEach(d => allDates.push(d))));
+  const overallDateLabel = dateRangeLabel(allDates);
+  if (overallDateLabel) {
+    reportDateBadge.style.display = 'inline-block';
+    reportDateBadge.textContent = 'Call data: ' + overallDateLabel;
+  } else {
+    reportDateBadge.style.display = 'none';
+  }
 
   // ---- overall ----
   let allDialed = 0, allResponded = 0, allDuration = 0, allCallers = 0, talkSum = 0, talkN = 0, best = null;
@@ -497,72 +513,18 @@ function renderAll() {
   `;
   overviewEl.style.display = 'block';
 
-  // ---- top leader banner (shown first, above everything) ----
-  const topLeaderEl = document.getElementById('topLeader');
-  if (best) {
-    topLeaderEl.style.display = 'block';
-    topLeaderEl.innerHTML = `
-      <div class="top-leader-inner">
-        <div class="top-leader-left">
-          <div class="top-leader-crown">🏆</div>
-          <div>
-            <div class="top-leader-tag">Top leader across all companies</div>
-            <div class="top-leader-name">${escapeHtml(best.name)}</div>
-            <div class="top-leader-company">${escapeHtml(best.company)}</div>
-          </div>
-        </div>
-        <div class="top-leader-stats">
-          <div class="tl-stat"><div class="tl-val">${best.rate.toFixed(1)}%</div><div class="tl-label">Response rate</div></div>
-          <div class="tl-stat"><div class="tl-val">${best.responded}</div><div class="tl-label">Responded</div></div>
-          <div class="tl-stat"><div class="tl-val">${best.dialed}</div><div class="tl-label">Dialed</div></div>
-        </div>
-      </div>
-    `;
-  } else {
-    topLeaderEl.style.display = 'none';
-  }
+  // ---- per-company tables, right under the summary, one after another ----
+  companiesEl.innerHTML = '';
+  companies.forEach(co => renderCompanyTable(co));
 
-  // ---- merged leaderboard: every agent from every company, ranked together ----
-  const mergedSection = document.getElementById('mergedSection');
-  const mergedBody = document.getElementById('mergedTableBody');
-  const allAgents = [];
-  companies.forEach(co => co.teams.forEach(t => t.callers.forEach(c => allAgents.push({ ...c, company: co.name }))));
-  if (allAgents.length) {
-    mergedSection.style.display = 'block';
-    const mergedSorted = [...allAgents].sort((a, b) => b.rate - a.rate || b.responded - a.responded);
-    mergedBody.innerHTML = mergedSorted.map((c, i) => `
-      <tr class="${i === 0 ? 'top1' : i < 3 ? 'top2' : ''}">
-        <td class="rank medal">${medal(i)}</td>
-        <td class="name">${escapeHtml(c.name)}</td>
-        <td>${escapeHtml(c.company)}</td>
-        <td>${c.dialed}</td>
-        <td>${c.responded}</td>
-        <td>
-          <div class="bar-cell">
-            <div class="bar-track"><div class="bar-fill" style="width:${Math.min(c.rate,100)}%"></div></div>
-            <span class="bar-pct">${c.rate.toFixed(0)}%</span>
-          </div>
-        </td>
-        <td>${c.talktime || '—'}</td>
-        <td>${c.duration || '—'}</td>
-      </tr>
-    `).join('');
-  } else {
-    mergedSection.style.display = 'none';
-  }
-
+  // ---- company comparison charts, at the bottom ----
   destroyCompareCharts();
-  chartRegistry = [];
   if (companies.length > 1 && typeof Chart !== 'undefined') {
     comparePanel.style.display = 'block';
     try { renderCompareCharts(); } catch (e) { console.error('Chart render failed:', e); comparePanel.style.display = 'none'; }
   } else {
     comparePanel.style.display = 'none';
   }
-
-  // ---- per-company ----
-  companiesEl.innerHTML = '';
-  companies.forEach(co => renderCompany(co));
 }
 
 function renderCompareCharts() {
@@ -619,23 +581,26 @@ function baseChartOptions(colors, titleText) {
   };
 }
 
-function renderCompany(co) {
+function renderCompanyTable(co) {
   const allCallers = co.teams.flatMap(t => t.callers);
   const dialed = allCallers.reduce((s, c) => s + c.dialed, 0);
   const responded = allCallers.reduce((s, c) => s + c.responded, 0);
   const duration = allCallers.reduce((s, c) => s + c.duration, 0);
   const rate = dialed > 0 ? (responded / dialed * 100) : 0;
+  const coDates = [];
+  co.teams.forEach(t => (t.dataDates || []).forEach(d => coDates.push(d)));
+  const coDateLabel = dateRangeLabel(coDates);
 
   const leaderboard = [...allCallers].sort((a, b) => b.rate - a.rate || b.responded - a.responded);
 
   const block = document.createElement('div');
   block.className = 'company';
-  const chartId1 = 'bar_' + co.id, chartId2 = 'donut_' + co.id;
   block.innerHTML = `
     <div class="company-head">
       <div class="company-head-left">
         <input class="company-name-input" value="${escapeAttr(co.name)}" data-id="${co.id}">
         <div class="company-stats">
+          ${coDateLabel ? `<span>Call data <b>${escapeHtml(coDateLabel)}</b></span>` : ''}
           <span>Dialed <b>${dialed}</b></span>
           <span>Responded <b>${responded}</b></span>
           <span>Response rate <b>${rate.toFixed(1)}%</b></span>
@@ -643,12 +608,6 @@ function renderCompany(co) {
         </div>
       </div>
       <button class="remove-btn" data-id="${co.id}" title="Remove this company">✕</button>
-    </div>
-    <div style="padding:16px 20px 0" id="chartsWrap_${co.id}">
-      <div class="chart-grid">
-        <div class="chart-box"><canvas id="${chartId1}"></canvas></div>
-        <div class="chart-box"><canvas id="${chartId2}"></canvas></div>
-      </div>
     </div>
     <div style="padding:8px 0 4px">
       <table>
@@ -685,49 +644,6 @@ function renderCompany(co) {
     companies = companies.filter(c => c.id !== co.id);
     renderAll();
   });
-
-  if (typeof Chart === 'undefined') {
-    const wrap = document.getElementById('chartsWrap_' + co.id);
-    if (wrap) wrap.style.display = 'none';
-    return;
-  }
-  try {
-    const colors = chartColors();
-    const barCtx = document.getElementById(chartId1).getContext('2d');
-    const barChart = new Chart(barCtx, {
-      type: 'bar',
-      data: {
-        labels: leaderboard.map(c => c.name),
-        datasets: [
-          { label: 'Dialed', data: leaderboard.map(c => c.dialed), backgroundColor: colors.gold, borderRadius: 5 },
-          { label: 'Responded', data: leaderboard.map(c => c.responded), backgroundColor: colors.teal, borderRadius: 5 },
-        ]
-      },
-      options: baseChartOptions(colors, 'Dialed vs responded by agent')
-    });
-
-    const notResponded = dialed - responded;
-    const donutCtx = document.getElementById(chartId2).getContext('2d');
-    const donutChart = new Chart(donutCtx, {
-      type: 'doughnut',
-      data: { labels: ['Responded', 'Not responded'], datasets: [{ data: [responded, notResponded], backgroundColor: [colors.teal, colors.grid] }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom', labels: { color: colors.text, font: { family: 'Inter' } } },
-          title: { display: true, text: 'Responded share', color: colors.text, font: { family: 'Space Grotesk', size: 13 } }
-        }
-      }
-    });
-
-    chartRegistry.push({ chart: barChart });
-    chartRegistry.push({ chart: donutChart });
-    compareCharts.push(barChart, donutChart);
-  } catch (e) {
-    console.error('Per-company chart render failed:', e);
-    const wrap = document.getElementById('chartsWrap_' + co.id);
-    if (wrap) wrap.style.display = 'none';
-  }
 }
 
 function refreshAllCharts() {
